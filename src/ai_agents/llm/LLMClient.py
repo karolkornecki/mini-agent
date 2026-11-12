@@ -1,7 +1,11 @@
 import os
 
 from openai import OpenAI
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import (
+    ChatCompletionMessage,
+    ChatCompletionMessageParam,
+    ChatCompletionToolParam,
+)
 
 
 class LLMClient:
@@ -15,10 +19,12 @@ class LLMClient:
     def complete(
         self,
         messages: list[ChatCompletionMessageParam],
-    ) -> str:
+        tools: list[ChatCompletionToolParam] | None = None,
+    ) -> ChatCompletionMessage:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
+            tools=tools or [],
         )
 
-        return response.choices[0].message.content or ""
+        return response.choices[0].message
