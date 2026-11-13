@@ -1,10 +1,6 @@
 import subprocess
 
-from openai.types.chat import ChatCompletionToolParam
-
-from mini_agent.tools._paths import PROJECT_ROOT
-
-MAX_OUTPUT_SIZE = 20_000
+from mini_agent.tools.paths import ROOT
 
 ALLOWED_COMMANDS = {
     "git_status": ["git", "status", "--short"],
@@ -20,33 +16,15 @@ def run_command(command: str) -> str:
 
     result = subprocess.run(
         ALLOWED_COMMANDS[command],
-        cwd=PROJECT_ROOT,
+        cwd=ROOT,
         capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
 
-    output = f"Exit code: {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-
-    return output[:MAX_OUTPUT_SIZE]
-
-
-RUN_COMMAND_TOOL: ChatCompletionToolParam = {
-    "type": "function",
-    "function": {
-        "name": "run_command",
-        "description": "Run an approved project command",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "enum": list(ALLOWED_COMMANDS),
-                },
-            },
-            "required": ["command"],
-            "additionalProperties": False,
-        },
-    },
-}
+    return (
+        f"Exit code: {result.returncode}\n"
+        f"STDOUT:\n{result.stdout[:10000]}\n"
+        f"STDERR:\n{result.stderr[:10000]}"
+    )

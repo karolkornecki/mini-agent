@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from mini_agent.agent.agent import Agent
-from mini_agent.llm.LLMClient import LLMClient
+from mini_agent.llm.client import LLMClient
 
 
 def main() -> None:
