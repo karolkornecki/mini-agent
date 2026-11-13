@@ -6,10 +6,13 @@ from ai_agents.llm.LLMClient import LLMClient
 if __name__ == "__main__":
     load_dotenv()
 
-    llm = LLMClient()
-    agent = Agent(llm)
+    agent = Agent(LLMClient())
 
-    result = agent.run("List files and explain the project structure.")
+    result = agent.run(
+        "Analyze the architecture of this Python project. "
+        "Read relevant source files and explain "
+        "how the components interact."
+    )
 
     print("\nAgent response:")
     print(result)

@@ -1,9 +1,23 @@
 import json
+import subprocess
+from collections.abc import Callable
+from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
 from ai_agents.llm.LLMClient import LLMClient
-from ai_agents.tools.list_files import TOOLS, list_files
+from ai_agents.tools.tools import (
+    TOOLS,
+    list_files,
+    read_file,
+    run_command,
+)
+
+TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
+    "list_files": list_files,
+    "read_file": read_file,
+    "run_command": run_command,
+}
 
 
 class Agent:
@@ -16,50 +30,47 @@ class Agent:
                 "role": "system",
                 "content": (
                     "You are a coding assistant. "
-                    "Use available tools to inspect the project. "
-                    "Never invent file contents."
+                    "Inspect the project using available tools. "
+                    "Never invent file contents. "
+                    "Do not read secrets or environment files."
                 ),
             },
-            {
-                "role": "user",
-                "content": task,
-            },
+            {"role": "user", "content": task},
         ]
 
-        max_iterations = 10
-
-        for _ in range(max_iterations):
+        for _ in range(10):
             response = self.llm.complete(
                 messages=messages,
                 tools=TOOLS,
             )
 
-            # Save assistant response, including tool calls
             messages.append(response.model_dump(exclude_none=True))
 
-            # No tool calls means the agent has finished
             if not response.tool_calls:
                 return response.content or ""
 
             for tool_call in response.tool_calls:
                 name = tool_call.function.name
-
-                print(f"Executing tool: {name}")
+                print(f"Executing: {name}")
 
                 try:
                     arguments = json.loads(tool_call.function.arguments)
 
-                    if name == "list_files":
-                        result = list_files(**arguments)
-                    else:
+                    tool = TOOL_REGISTRY.get(name)
+                    if tool is None:
                         raise ValueError(f"Unknown tool: {name}")
 
+                    result = tool(**arguments)
                     output = json.dumps(result)
 
-                except (ValueError, TypeError, OSError) as exc:
+                except (
+                    ValueError,
+                    TypeError,
+                    OSError,
+                    subprocess.TimeoutExpired,
+                ) as exc:
                     output = f"Tool error: {exc}"
 
-                # Send tool result back to the model
                 messages.append(
                     {
                         "role": "tool",
@@ -68,4 +79,4 @@ class Agent:
                     }
                 )
 
-        raise RuntimeError("Agent exceeded maximum iterations")
+        raise RuntimeError("Maximum iterations exceeded")
