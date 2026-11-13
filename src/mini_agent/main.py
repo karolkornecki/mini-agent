@@ -1,9 +1,10 @@
 from dotenv import load_dotenv
 
-from ai_agents.agent.agent import Agent
-from ai_agents.llm.LLMClient import LLMClient
+from mini_agent.agent.agent import Agent
+from mini_agent.llm.LLMClient import LLMClient
 
-if __name__ == "__main__":
+
+def main() -> None:
     load_dotenv()
 
     agent = Agent(LLMClient())
@@ -16,3 +17,7 @@ if __name__ == "__main__":
 
     print("\nAgent response:")
     print(result)
+
+
+if __name__ == "__main__":
+    main()

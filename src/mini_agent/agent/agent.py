@@ -5,8 +5,8 @@ from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
-from ai_agents.llm.LLMClient import LLMClient
-from ai_agents.tools.tools import (
+from mini_agent.llm.LLMClient import LLMClient
+from mini_agent.tools.tools import (
     TOOLS,
     list_files,
     read_file,
@@ -38,7 +38,7 @@ class Agent:
             {"role": "user", "content": task},
         ]
 
-        for _ in range(10):
+        for _ in range(100):
             response = self.llm.complete(
                 messages=messages,
                 tools=TOOLS,
