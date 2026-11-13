@@ -1,12 +1,8 @@
-from mini_agent.tools.paths import (
-    MAX_RESULTS,
-    ROOT,
-    resolve_path,
-)
+import mini_agent.tools.paths as paths
 
 
 def list_files(path: str = ".") -> list[str]:
-    directory = resolve_path(path)
+    directory = paths.resolve_path(path)
 
     if not directory.is_dir():
         raise ValueError("Not a directory")
@@ -15,10 +11,10 @@ def list_files(path: str = ".") -> list[str]:
 
     for item in sorted(directory.iterdir()):
         try:
-            resolve_path(str(item.relative_to(ROOT)))
+            paths.resolve_path(str(item.relative_to(paths.ROOT)))
         except ValueError:
             continue
 
         results.append(item.name)
 
-    return results[:MAX_RESULTS]
+    return results[: paths.MAX_RESULTS]

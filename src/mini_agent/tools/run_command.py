@@ -1,6 +1,6 @@
 import subprocess
 
-from mini_agent.tools.paths import ROOT
+import mini_agent.tools.paths as paths
 
 ALLOWED_COMMANDS = {
     "git_status": ["git", "status", "--short"],
@@ -16,7 +16,7 @@ def run_command(command: str) -> str:
 
     result = subprocess.run(
         ALLOWED_COMMANDS[command],
-        cwd=ROOT,
+        cwd=paths.ROOT,
         capture_output=True,
         text=True,
         timeout=30,

@@ -2,11 +2,7 @@ from io import StringIO
 
 from unidiff import PatchSet
 
-from mini_agent.tools.paths import (
-    MAX_FILE_SIZE,
-    ROOT,
-    resolve_path,
-)
+import mini_agent.tools.paths as paths
 from mini_agent.tools.read_file import read_file
 
 
@@ -21,11 +17,11 @@ def apply_patch(patch: str) -> str:
     if file_patch.is_added_file or file_patch.is_removed_file:
         raise ValueError("File creation/deletion unsupported")
 
-    if file_patch.source_file != file_patch.target_file:
+    if file_patch.is_rename:
         raise ValueError("Renaming unsupported")
 
     path = file_patch.path.removeprefix("b/")
-    target = resolve_path(path)
+    target = paths.resolve_path(path)
 
     original = read_file(path).splitlines(keepends=True)
     result = []
@@ -62,9 +58,9 @@ def apply_patch(patch: str) -> str:
     result.extend(original[cursor:])
     updated = "".join(result)
 
-    if len(updated.encode("utf-8")) > MAX_FILE_SIZE:
+    if len(updated.encode("utf-8")) > paths.MAX_FILE_SIZE:
         raise ValueError("Updated file too large")
 
     target.write_text(updated, encoding="utf-8")
 
-    return f"Patched {target.relative_to(ROOT)}"
+    return f"Patched {target.relative_to(paths.ROOT)}"

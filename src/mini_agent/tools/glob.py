@@ -1,23 +1,19 @@
-from mini_agent.tools.paths import (
-    MAX_RESULTS,
-    ROOT,
-    resolve_path,
-)
+from mini_agent.tools import paths
 
 
 def glob(pattern: str) -> list[str]:
     results = []
 
-    for item in ROOT.glob(pattern):
+    for item in paths.ROOT.glob(pattern):
         try:
-            target = resolve_path(str(item.relative_to(ROOT)))
+            target = paths.resolve_path(str(item.relative_to(paths.ROOT)))
         except ValueError:
             continue
 
         if target.is_file():
-            results.append(str(target.relative_to(ROOT)))
+            results.append(str(target.relative_to(paths.ROOT)))
 
-        if len(results) >= MAX_RESULTS:
+        if len(results) >= paths.MAX_RESULTS:
             break
 
     return sorted(results)
