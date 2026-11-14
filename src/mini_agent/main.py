@@ -22,18 +22,18 @@ def main() -> None:
             # Do not modify any other files.
             # Do not skip any steps.
             # """
-            # """
-            # analyse this repositroy create directory x and file architecture.txt
-            #  with description of
-            # all the files and directory structure
-            # Do not modify any other files.
-            # Do not skip any steps.
-            # """
             """
-            analyse this repository and do the code review
+            analyse this repository create directory doc and file architecture.txt
+             with description of
+            all the files and directory structure
             Do not modify any other files.
             Do not skip any steps.
             """
+            # """
+            # analyse this repository and do the code review
+            # Do not modify any other files.
+            # Do not skip any steps.
+            # """
         )
 
         print("\n--- AGENT RESPONSE ---")

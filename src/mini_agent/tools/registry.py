@@ -64,7 +64,6 @@ TOOLS = [
             ["path", "content"],
         ),
         write_file,
-        requires_approval=True,
     ),
     Tool(
         "edit_file",
@@ -78,14 +77,12 @@ TOOLS = [
             ["path", "old_text", "new_text"],
         ),
         edit_file,
-        requires_approval=True,
     ),
     Tool(
         "apply_patch",
         "Apply a unified diff to one existing file",
         params({"patch": STRING}, ["patch"]),
         apply_patch,
-        requires_approval=True,
     ),
     Tool(
         "run_command",
@@ -100,7 +97,6 @@ TOOLS = [
             ["command"],
         ),
         run_command,
-        requires_approval=True,
     ),
 ]
 
