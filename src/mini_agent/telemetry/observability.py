@@ -1,31 +1,57 @@
-
+import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Any
 
 from langfuse import get_client
 
-
-def agent_trace() -> object:
-    return get_client().start_as_current_observation(
-        name="agent.run",
-        as_type="agent",
-    )
+logger = logging.getLogger(__name__)
 
 
-def llm_trace(model: str) -> object:
-    return get_client().start_as_current_observation(
-        name="llm.complete",
-        as_type="generation",
+class NoOpObservation:
+    def update(self, **kwargs: Any) -> None:
+        pass
+
+
+@contextmanager
+def _observation(
+    name: str,
+    as_type: str,
+    **kwargs: Any,
+) -> Iterator[Any]:
+    try:
+        manager = get_client().start_as_current_observation(
+            name=name,
+            as_type=as_type,
+            **kwargs,
+        )
+    except Exception:
+        logger.exception("Failed to initialize Langfuse observation")
+        yield NoOpObservation()
+        return
+
+    with manager as observation:
+        yield observation
+
+
+def agent_trace():
+    return _observation("agent.run", "agent")
+
+
+def llm_trace(model: str):
+    return _observation(
+        "llm.complete",
+        "generation",
         model=model,
     )
 
 
-def tool_trace(name: str) -> object:
-    return get_client().start_as_current_observation(
-        name=f"tool.{name}",
-        as_type="tool",
-    )
+def tool_trace(name: str):
+    return _observation(f"tool.{name}", "tool")
 
 
 def flush() -> None:
-    get_client().flush()
+    try:
+        get_client().flush()
+    except Exception:
+        logger.exception("Failed to flush Langfuse")
