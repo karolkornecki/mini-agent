@@ -30,13 +30,14 @@ class Agent:
             {"role": "user", "content": task},
         ]
 
-        for _ in range(15):
+        for _ in range(150):
             self.metrics.iterations += 1
-
             response, metrics = self.llm.complete(
                 messages=messages,
                 tools=get_tool_schemas(),
             )
+            print(response.content)
+            print("--------------------")
 
             self.metrics.llm_calls.append(metrics)
 
