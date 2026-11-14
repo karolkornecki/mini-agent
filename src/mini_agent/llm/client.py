@@ -4,6 +4,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from mini_agent.telemetry.observability import llm_trace
 from mini_agent.telemetry.telemetry import LLMCallMetrics
 
 
@@ -23,26 +24,39 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> tuple[Any, LLMCallMetrics]:
-        start = perf_counter()
+        with llm_trace(self.model) as generation:
+            start = perf_counter()
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-        )
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+            )
 
-        latency = perf_counter() - start
-        usage = response.usage
+            latency = perf_counter() - start
+            usage = response.usage
 
-        cached = 0
-        if usage and usage.prompt_tokens_details:
-            cached = usage.prompt_tokens_details.cached_tokens or 0
+            cached = 0
+            if usage and usage.prompt_tokens_details:
+                cached = usage.prompt_tokens_details.cached_tokens or 0
 
-        metrics = LLMCallMetrics(
-            latency_seconds=latency,
-            input_tokens=usage.prompt_tokens if usage else 0,
-            output_tokens=usage.completion_tokens if usage else 0,
-            cached_tokens=cached,
-        )
+            metrics = LLMCallMetrics(
+                latency_seconds=latency,
+                input_tokens=usage.prompt_tokens if usage else 0,
+                output_tokens=usage.completion_tokens if usage else 0,
+                cached_tokens=cached,
+            )
 
-        return response.choices[0].message, metrics
+            generation.update(
+                usage_details={
+                    "input": metrics.input_tokens,
+                    "output": metrics.output_tokens,
+                    "input_cached_tokens": metrics.cached_tokens,
+                },
+                metadata={
+                    "latency_seconds": latency,
+                    "tool_calls_requested": len(response.choices[0].message.tool_calls or []),
+                },
+            )
+
+            return response.choices[0].message, metrics

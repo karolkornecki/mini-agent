@@ -2,6 +2,10 @@ import json
 from typing import Any
 
 from mini_agent.llm.client import LLMClient
+from mini_agent.telemetry.observability import (
+    agent_trace,
+    tool_trace,
+)
 from mini_agent.telemetry.telemetry import AgentMetrics
 from mini_agent.tools.registry import (
     REGISTRY,
@@ -15,6 +19,20 @@ class Agent:
         self.metrics = AgentMetrics()
 
     def run(self, task: str) -> str:
+        self.metrics = AgentMetrics()
+
+        with agent_trace() as trace:
+            result = self._run(task)
+            trace.update(
+                metadata={
+                    "iterations": self.metrics.iterations,
+                    "tool_calls": self.metrics.tool_calls,
+                    "tool_errors": self.metrics.tool_errors,
+                }
+            )
+            return result
+
+    def _run(self, task: str) -> str:
         self.metrics = AgentMetrics()
 
         messages: list[dict[str, Any]] = [
@@ -76,7 +94,15 @@ class Agent:
                         if approval != "y":
                             raise PermissionError("User rejected tool execution")
 
-                    result = tool.execute(**arguments)
+                    with tool_trace(name) as observation:
+                        try:
+                            result = tool.execute(**arguments)
+                        except Exception as exc:
+                            observation.update(
+                                level="ERROR",
+                                status_message=type(exc).__name__,
+                            )
+                            raise
                     output = json.dumps(
                         result,
                         ensure_ascii=False,

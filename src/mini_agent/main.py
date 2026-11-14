@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from mini_agent.agent.agent import Agent
 from mini_agent.llm.client import LLMClient
+from mini_agent.telemetry.observability import flush
 
 
 def main() -> None:
@@ -43,6 +44,7 @@ def main() -> None:
 
         print("\n--- METRICS ---")
         print(agent.metrics.report(context_window))
+        flush()
 
 
 if __name__ == "__main__":
