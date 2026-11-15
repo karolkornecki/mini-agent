@@ -36,3 +36,27 @@ def test_cli_ignores_empty_input() -> None:
     )
 
     agent.run.assert_not_called()
+
+
+def test_cli_clears_conversation() -> None:
+    agent = Mock()
+    agent.run.return_value = "Done"
+
+    commands = iter(
+        [
+            "read README.md",
+            "/clear",
+            "list files",
+            "/exit",
+        ]
+    )
+
+    run_cli(
+        agent,
+        read_input=lambda _: next(commands),
+    )
+
+    agent.reset_conversation.assert_called_once_with()
+    assert agent.run.call_count == 2
+    agent.run.assert_any_call("read README.md")
+    agent.run.assert_any_call("list files")

@@ -21,6 +21,11 @@ def run_cli(
             print("Goodbye!")
             break
 
+        if task == "/clear":
+            agent.reset_conversation()
+            print("Conversation cleared.")
+            continue
+
         if not task:
             continue
 
