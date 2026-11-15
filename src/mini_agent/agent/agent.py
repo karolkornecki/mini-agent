@@ -14,6 +14,20 @@ from mini_agent.tools.registry import (
     get_tool_schemas,
 )
 
+SYSTEM_PROMPT = """
+You are a coding assistant operating in the current repository.
+
+For questions about this repository, its architecture, code,
+behavior, or purpose:
+- Inspect relevant files using tools before answering.
+- Never assume repository contents from the conversation alone
+  when verification is needed.
+- If you cannot verify something, explicitly say so.
+- Do not invent files, functions, or project details.
+
+Before modifying code, inspect the relevant files.
+Never read secrets or environment files.
+"""
 
 class Agent:
     def __init__(self, llm: LLMClient) -> None:
@@ -22,12 +36,7 @@ class Agent:
         self.messages: list[dict[str, Any]] = [
             {
                 "role": "system",
-                "content": (
-                    "You are a coding assistant. "
-                    "Inspect files before editing. "
-                    "Never invent file contents. "
-                    "Do not read secrets or environment files."
-                ),
+                "content": SYSTEM_PROMPT,
             },
         ]
 
@@ -51,12 +60,13 @@ class Agent:
 
         for _ in range(150):
             self.metrics.iterations += 1
-            response, metrics = self.llm.complete(
+            response, metrics = self.llm.complete_stream(
                 messages=messages,
                 tools=get_tool_schemas(),
+                on_text=lambda text: print(text, end="", flush=True),
             )
-            print(response.content)
-            print("--------------------")
+            if response.content:
+                print()
 
             self.metrics.llm_calls.append(metrics)
 
