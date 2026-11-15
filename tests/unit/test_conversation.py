@@ -8,7 +8,7 @@ def test_conversation_preserves_history() -> None:
     llm = Mock()
     captured_messages = []
 
-    def complete(*, messages, tools):
+    def complete_stream(*, messages, tools, on_text):
         captured_messages.append(deepcopy(messages))
 
         response = Mock()
@@ -18,9 +18,10 @@ def test_conversation_preserves_history() -> None:
             "role": "assistant",
             "content": "Done",
         }
+        on_text(response.content)
         return response, Mock()
 
-    llm.complete.side_effect = complete
+    llm.complete_stream.side_effect = complete_stream
 
     agent = Agent(llm)
 
@@ -28,7 +29,7 @@ def test_conversation_preserves_history() -> None:
         agent.run("First task")
         agent.run("Second task")
 
-    assert llm.complete.call_count == 2
+    assert llm.complete_stream.call_count == 2
 
     assert [m["role"] for m in captured_messages[0]] == [
         "system",

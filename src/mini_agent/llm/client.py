@@ -1,8 +1,14 @@
 import os
+from collections.abc import Callable
 from time import perf_counter
 from typing import Any
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessage
+from openai.types.chat.chat_completion_message_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+    Function,
+)
 
 from mini_agent.telemetry.observability import llm_trace
 from mini_agent.telemetry.telemetry import LLMCallMetrics
@@ -19,22 +25,80 @@ class LLMClient:
             "qwen/qwen3-coder",
         )
 
-    def complete(
+    def complete_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
-    ) -> tuple[Any, LLMCallMetrics]:
+        on_text: Callable[[str], None],
+    ) -> tuple[ChatCompletionMessage, LLMCallMetrics]:
         with llm_trace(self.model) as generation:
             start = perf_counter()
 
-            response = self.client.chat.completions.create(
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 tools=tools,
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+
+            content_parts: list[str] = []
+            tool_calls: dict[int, dict[str, Any]] = {}
+            usage = None
+
+            for chunk in stream:
+                if chunk.usage is not None:
+                    usage = chunk.usage
+
+                if not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                if delta.content:
+                    content_parts.append(delta.content)
+                    on_text(delta.content)
+
+                for tool_delta in delta.tool_calls or []:
+                    index = tool_delta.index
+
+                    if index not in tool_calls:
+                        tool_calls[index] = {
+                            "id": "",
+                            "name": "",
+                            "arguments": "",
+                        }
+
+                    call = tool_calls[index]
+
+                    if tool_delta.id:
+                        call["id"] += tool_delta.id
+
+                    if tool_delta.function:
+                        if tool_delta.function.name:
+                            call["name"] += tool_delta.function.name
+                        if tool_delta.function.arguments:
+                            call["arguments"] += tool_delta.function.arguments
+
+            reconstructed_calls = [
+                ChatCompletionMessageFunctionToolCall(
+                    id=call["id"],
+                    type="function",
+                    function=Function(
+                        name=call["name"],
+                        arguments=call["arguments"],
+                    ),
+                )
+                for _, call in sorted(tool_calls.items())
+            ]
+
+            response = ChatCompletionMessage(
+                role="assistant",
+                content="".join(content_parts) or None,
+                tool_calls=reconstructed_calls or None,
             )
 
             latency = perf_counter() - start
-            usage = response.usage
 
             cached = 0
             if usage and usage.prompt_tokens_details:
@@ -55,8 +119,8 @@ class LLMClient:
                 },
                 metadata={
                     "latency_seconds": latency,
-                    "tool_calls_requested": len(response.choices[0].message.tool_calls or []),
+                    "tool_calls_requested": len(reconstructed_calls),
                 },
             )
 
-            return response.choices[0].message, metrics
+            return response, metrics

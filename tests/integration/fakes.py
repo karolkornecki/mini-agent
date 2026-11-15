@@ -1,5 +1,6 @@
 import json
 from collections import deque
+from collections.abc import Callable
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessage
@@ -15,10 +16,11 @@ class FakeLLM:
         self.responses = deque(responses)
         self.calls: list[dict[str, Any]] = []
 
-    def complete(
+    def complete_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
+        on_text: Callable[[str], None],
     ) -> tuple[ChatCompletionMessage, Any]:
         self.calls.append(
             {
@@ -30,7 +32,11 @@ class FakeLLM:
         if not self.responses:
             raise AssertionError("No more fake LLM responses")
 
-        return self.responses.popleft()
+        response, metrics = self.responses.popleft()
+        if response.content:
+            on_text(response.content)
+
+        return response, metrics
 
 
 def tool_call_response(
