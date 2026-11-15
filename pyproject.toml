@@ -39,4 +39,9 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not live'"
+
+markers = [
+    "integration: integration tests",
+    "live: tests requiring real LLM API",
+]
