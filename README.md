@@ -102,6 +102,16 @@ Run the tests and lint checks with:
 uv run pytest
 uv run ruff check .
 ```
+
+Enable the pre-commit hook after cloning:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook runs `uv run --locked ruff check .` before every commit and blocks the
+commit if linting fails. It checks the working tree without changing files.
+
 ## Running Tests
 
 The project uses **pytest** for automated testing and **uv** for dependency management.
