@@ -122,6 +122,10 @@ uv run pytest -v
 
 Live tests are excluded by default to prevent accidental API usage and costs.
 
+GitHub Actions runs the unit and integration tests whenever a pull request is opened,
+updated, or reopened. The workflow uses the Python version in `.python-version` and
+installs dependencies from `uv.lock`. Live tests remain excluded.
+
 ### Run Unit Tests
 
 ```bash
