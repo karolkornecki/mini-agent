@@ -102,3 +102,106 @@ Run the tests and lint checks with:
 uv run pytest
 uv run ruff check .
 ```
+## Running Tests
+
+The project uses **pytest** for automated testing and **uv** for dependency management.
+
+Tests are divided into three categories:
+
+| Type | Directory | Description |
+|---|---|---|
+| Unit | `tests/unit/` | Tests individual components in isolation |
+| Integration | `tests/integration/` | Tests agent loop, tools, registry, and permissions using a Fake LLM |
+| Live / Evals | `tests/evals/` | Tests the agent against a real LLM via OpenRouter |
+
+### Run All Tests (Except Live)
+
+```bash
+uv run pytest -v
+```
+
+Live tests are excluded by default to prevent accidental API usage and costs.
+
+### Run Unit Tests
+
+```bash
+uv run pytest tests/unit/ -v
+```
+
+### Run Integration Tests
+
+```bash
+uv run pytest tests/integration/ -v
+```
+
+Integration tests use a Fake LLM and isolated temporary workspaces. They do not require an OpenRouter API key.
+
+### Run Live Tests
+
+Live tests execute the agent against a real LLM and require a valid `OPENROUTER_API_KEY` in the `.env` file.
+
+```bash
+RUN_LIVE_TESTS=1 uv run pytest tests/evals/ -m live -v -s
+```
+
+Run a specific live test:
+
+```bash
+RUN_LIVE_TESTS=1 uv run pytest \
+  tests/evals/test_live_read.py \
+  -m live -v -s
+```
+
+The `-m live` option is required because the default pytest configuration excludes tests marked as `live`.
+
+The `RUN_LIVE_TESTS=1` environment variable explicitly enables real API calls.
+
+**Warning:** Live tests consume API tokens, may incur costs, and can produce nondeterministic results.
+
+### Test Reports
+
+Generate a JUnit XML report:
+
+```bash
+uv run pytest --junitxml=test-results/results.xml
+```
+
+Run tests with detailed output:
+
+```bash
+uv run pytest -vv -s
+```
+
+### Code Quality
+
+Run Ruff linting:
+
+```bash
+uv run ruff check .
+```
+
+Check formatting:
+
+```bash
+uv run ruff format --check .
+```
+
+### PyCharm Configuration
+
+For live tests, configure the pytest run configuration with:
+
+- **Additional Arguments:** `-m live -v -s`
+- **Environment Variables:** `RUN_LIVE_TESTS=1`
+
+The default pytest configuration excludes live tests:
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not live'"
+
+markers = [
+    "integration: integration tests",
+    "live: tests requiring real LLM API",
+]
+```

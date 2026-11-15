@@ -223,3 +223,6 @@ __marimo__/
 !.env.example
 
 .idea/
+
+/test-results/*
+!/test-results/.gitkeep
