@@ -25,6 +25,11 @@ def test_read_file_allowed_without_approval(
     # Avoid external Langfuse calls.
     monkeypatch.setattr(agent_module, "agent_trace", fake_trace)
     monkeypatch.setattr(agent_module, "tool_trace", fake_trace)
+    monkeypatch.setattr(
+        agent_module,
+        "request_approval",
+        lambda name, arguments: False,
+    )
 
     # Fail if Agent unexpectedly asks for approval.
     def unexpected_approval(prompt: str) -> str:
@@ -69,7 +74,11 @@ def test_write_file_approved(
 ) -> None:
     monkeypatch.setattr(agent_module, "agent_trace", fake_trace)
     monkeypatch.setattr(agent_module, "tool_trace", fake_trace)
-    monkeypatch.setattr("builtins.input", lambda _: "y")
+    monkeypatch.setattr(
+        agent_module,
+        "request_approval",
+        lambda name, arguments: True,
+    )
 
     fake_llm = FakeLLM(
         [
@@ -107,7 +116,11 @@ def test_write_file_rejected(
 ) -> None:
     monkeypatch.setattr(agent_module, "agent_trace", fake_trace)
     monkeypatch.setattr(agent_module, "tool_trace", fake_trace)
-    monkeypatch.setattr("builtins.input", lambda _: "n")
+    monkeypatch.setattr(
+        agent_module,
+        "request_approval",
+        lambda name, arguments: False,
+    )
 
     fake_llm = FakeLLM(
         [
@@ -133,14 +146,14 @@ def test_write_file_rejected(
     assert not (project / "hello.txt").exists()
 
     assert agent.metrics.tool_calls == 1
-    assert agent.metrics.tool_errors == 1
+    assert agent.metrics.tool_errors == 0
 
     tool_messages = [
         message for message in fake_llm.calls[1]["messages"] if message["role"] == "tool"
     ]
 
     assert len(tool_messages) == 1
-    assert "User rejected" in tool_messages[0]["content"]
+    assert "User rejected execution" in tool_messages[0]["content"]
 
 
 @pytest.mark.integration

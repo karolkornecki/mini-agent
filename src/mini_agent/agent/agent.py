@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from mini_agent.llm.client import LLMClient
+from mini_agent.permissions.approval import request_approval
 from mini_agent.permissions.permissions import Permission, get_permission
 from mini_agent.telemetry.observability import (
     agent_trace,
@@ -80,25 +81,23 @@ class Agent:
                     if not isinstance(arguments, dict):
                         raise ValueError("Arguments must be an object")
 
-                    print(f"\nTool: {name}")
-                    print(
-                        json.dumps(
-                            arguments,
-                            indent=2,
-                            ensure_ascii=False,
-                        )[:2000]
-                    )
-
                     permission = get_permission(name)
 
                     if permission == Permission.DENY:
                         raise PermissionError(f"Tool denied: {name}")
 
                     if permission == Permission.ASK:
-                        approval = input(f"Allow execution of {name}? [y/N]: ").strip().lower()
+                        if not request_approval(name, arguments):
+                            output = f"User rejected execution of {name}"
 
-                        if approval != "y":
-                            raise PermissionError(f"User rejected execution of {name}")
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": call.id,
+                                    "content": output,
+                                }
+                            )
+                            continue
 
                     with tool_trace(name) as observation:
                         try:

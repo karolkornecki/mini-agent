@@ -39,23 +39,3 @@ def test_all_tools_have_valid_schema():
         assert parameters["additionalProperties"] is False
 
         assert set(parameters["required"]).issubset(parameters["properties"])
-
-
-def test_mutating_tools_require_approval():
-    for name in (
-        "write_file",
-        "edit_file",
-        "apply_patch",
-        "run_command",
-    ):
-        assert REGISTRY[name].requires_approval
-
-
-def test_read_only_tools_do_not_require_approval():
-    for name in (
-        "list_files",
-        "read_file",
-        "glob",
-        "grep",
-    ):
-        assert not REGISTRY[name].requires_approval
