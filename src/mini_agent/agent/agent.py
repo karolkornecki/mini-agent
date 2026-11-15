@@ -19,6 +19,17 @@ class Agent:
     def __init__(self, llm: LLMClient) -> None:
         self.llm = llm
         self.metrics = AgentMetrics()
+        self.messages: list[dict[str, Any]] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a coding assistant. "
+                    "Inspect files before editing. "
+                    "Never invent file contents. "
+                    "Do not read secrets or environment files."
+                ),
+            },
+        ]
 
     def run(self, task: str) -> str:
         self.metrics = AgentMetrics()
@@ -35,20 +46,8 @@ class Agent:
             return result
 
     def _run(self, task: str) -> str:
-        self.metrics = AgentMetrics()
-
-        messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a coding assistant. "
-                    "Inspect files before editing. "
-                    "Never invent file contents. "
-                    "Do not read secrets or environment files."
-                ),
-            },
-            {"role": "user", "content": task},
-        ]
+        messages = self.messages.copy()
+        messages.append({"role": "user", "content": task})
 
         for _ in range(150):
             self.metrics.iterations += 1
@@ -64,6 +63,7 @@ class Agent:
             messages.append(response.model_dump(exclude_none=True))
 
             if not response.tool_calls:
+                self.messages = messages
                 return response.content or ""
 
             for call in response.tool_calls:
@@ -132,3 +132,6 @@ class Agent:
                 )
 
         raise RuntimeError("Max iterations exceeded")
+
+    def reset_conversation(self) -> None:
+        self.messages = self.messages[:1]
