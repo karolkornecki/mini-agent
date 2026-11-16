@@ -35,7 +35,13 @@ uv run mini-agent
 You can also run the Python module with `uv run python -m mini_agent.main`.
 The project and command are named `mini-agent`; the Python package is `mini_agent`.
 
-The task is currently defined directly in `src/mini_agent/main.py`, in the `agent.run(...)` call. Change that text to try a different task. File tools operate relative to the directory where you start the program. The agent asks for approval before creating or editing files or running commands.
+Enter a task at the interactive `>` prompt. The agent streams its response and
+shows tool activity in the terminal. Conversation history is retained between
+tasks; use `/clear` to reset it and `/exit` to quit. Metrics for the latest task
+are printed when the CLI exits.
+
+File tools operate relative to the directory where you start the program. The
+agent asks for approval before creating or editing files or running commands.
 
 ## Configuration
 
@@ -67,12 +73,20 @@ The main files and directories are:
 mini-agent/
 ├── src/
 │   └── mini_agent/
-│       ├── main.py               # Entry point, example task, and final metrics output
+│       ├── main.py               # Entry point, CLI wiring, and final metrics output
 │       ├── agent/
-│       │   └── agent.py          # Conversation loop, tool execution, and approval prompts
+│       │   ├── agent.py          # Conversation loop, tool execution, and permission checks
+│       │   └── events.py         # Streamed text and tool lifecycle events
+│       ├── cli/
+│       │   ├── cli.py            # Interactive tasks, /clear, and /exit
+│       │   └── renderer.py       # Terminal rendering for agent events
 │       ├── llm/
-│       │   └── client.py         # OpenRouter requests and model usage metrics
+│       │   └── client.py         # OpenRouter streaming and model usage metrics
+│       ├── permissions/
+│       │   ├── permissions.py    # Allow, ask, or deny policy for each tool
+│       │   └── approval.py       # Interactive approval prompts
 │       ├── tools/
+│       │   ├── AGENTS.md         # Tool development guidance
 │       │   ├── base.py           # Tool definition and schema generation
 │       │   ├── registry.py       # Available tools and their argument schemas
 │       │   ├── paths.py          # Project path checks and file access limits
@@ -87,7 +101,9 @@ mini-agent/
 │       └── telemetry/
 │           ├── telemetry.py     # Metrics collection and reporting
 │           └── observability.py # Langfuse tracing and flushing
-├── tests/                       # Tests for tools, registration, and metrics
+├── tests/                       # Unit, fake-LLM integration, and opt-in live tests
+│   └── AGENTS.md                 # Test fixtures, fakes, and coverage map
+├── AGENTS.md                     # Repository guidance for coding agents
 ├── .env.example                 # Environment configuration template
 ├── pyproject.toml               # Package metadata, dependencies, and tool settings
 ├── uv.lock                      # Locked dependency versions
@@ -95,6 +111,12 @@ mini-agent/
 ```
 
 ## Development
+
+Coding agents should start with [AGENTS.md](AGENTS.md) for the code map, behavior
+contracts, and development workflow. Additional guides cover
+[tool development](src/mini_agent/tools/AGENTS.md) and
+[testing](tests/AGENTS.md). These files describe how to work on the repository;
+the mini-agent application does not currently load them into its own prompts.
 
 Run the tests and lint checks with:
 
