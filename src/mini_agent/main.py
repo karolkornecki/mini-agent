@@ -1,5 +1,3 @@
-import os
-
 from dotenv import load_dotenv
 
 from mini_agent.agent.agent import Agent
@@ -13,15 +11,14 @@ def main() -> None:
     load_dotenv()
 
     renderer = CLIRenderer()
-    agent = Agent(LLMClient(), on_event=renderer.render)
+    agent = Agent(
+        LLMClient(),
+        on_event=renderer.render,
+    )
 
     try:
         run_cli(agent, renderer)
     finally:
-        context_window = int(os.getenv("MODEL_CONTEXT_WINDOW", "128000"))
-
-        print("\n--- METRICS ---")
-        print(agent.metrics.report(context_window))
         flush()
 
 

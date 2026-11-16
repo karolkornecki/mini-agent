@@ -20,17 +20,21 @@ class AgentMetrics:
 
     @property
     def input_tokens_total(self) -> int:
-        return sum(x.input_tokens for x in self.llm_calls)
+        return sum(call.input_tokens for call in self.llm_calls)
 
     @property
     def output_tokens_total(self) -> int:
-        return sum(x.output_tokens for x in self.llm_calls)
+        return sum(call.output_tokens for call in self.llm_calls)
+
+    @property
+    def cached_tokens_total(self) -> int:
+        return sum(call.cached_tokens for call in self.llm_calls)
 
     @property
     def elapsed_seconds(self) -> float:
         return perf_counter() - self.started_at
 
-    def report(self, context_window: int) -> str:
+    def report(self, context_window: int = 128_000) -> str:
         latest = self.llm_calls[-1] if self.llm_calls else None
 
         utilization = (
@@ -45,5 +49,6 @@ class AgentMetrics:
             f"Tool errors: {self.tool_errors}\n"
             f"Input tokens total: {self.input_tokens_total}\n"
             f"Output tokens total: {self.output_tokens_total}\n"
+            f"Cached tokens total: {self.cached_tokens_total}\n"
             f"Context utilization: {utilization:.1f}%"
         )
