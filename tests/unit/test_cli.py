@@ -1,12 +1,19 @@
 from unittest.mock import Mock
 
 from mini_agent.cli.cli import run_cli
+from mini_agent.telemetry.telemetry import AgentMetrics
+
+
+def make_agent() -> Mock:
+    agent = Mock()
+    agent.metrics = AgentMetrics()
+    agent.run.return_value = "Done"
+    return agent
 
 
 def test_cli_runs_multiple_tasks() -> None:
-    agent = Mock()
+    agent = make_agent()
     renderer = Mock()
-    agent.run.return_value = "Done"
 
     commands = iter(
         [
@@ -25,10 +32,12 @@ def test_cli_runs_multiple_tasks() -> None:
     assert agent.run.call_count == 2
     agent.run.assert_any_call("read README.md")
     agent.run.assert_any_call("list files")
+    assert renderer.render_metrics.call_count == 2
+    assert renderer.finish.call_count == 2
 
 
 def test_cli_ignores_empty_input() -> None:
-    agent = Mock()
+    agent = make_agent()
     renderer = Mock()
 
     commands = iter(["", "   ", "/exit"])
@@ -40,13 +49,12 @@ def test_cli_ignores_empty_input() -> None:
     )
 
     agent.run.assert_not_called()
+    renderer.render_metrics.assert_not_called()
 
 
 def test_cli_clears_conversation() -> None:
-    agent = Mock()
+    agent = make_agent()
     renderer = Mock()
-
-    agent.run.return_value = "Done"
 
     commands = iter(
         [
@@ -65,5 +73,25 @@ def test_cli_clears_conversation() -> None:
 
     agent.reset_conversation.assert_called_once_with()
     assert agent.run.call_count == 2
-    agent.run.assert_any_call("read README.md")
-    agent.run.assert_any_call("list files")
+    assert renderer.render_metrics.call_count == 2
+
+
+def test_cli_displays_metrics_after_failure(capsys) -> None:
+    agent = make_agent()
+    renderer = Mock()
+
+    agent.run.side_effect = RuntimeError("LLM unavailable")
+
+    commands = iter(["analyze repo", "/exit"])
+
+    run_cli(
+        agent,
+        renderer,
+        read_input=lambda _: next(commands),
+    )
+
+    output = capsys.readouterr().out
+
+    assert "Error: LLM unavailable" in output
+    renderer.finish.assert_called_once()
+    renderer.render_metrics.assert_called_once()

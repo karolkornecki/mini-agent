@@ -6,6 +6,7 @@ from mini_agent.agent.events import (
     ToolFinished,
     ToolStarted,
 )
+from mini_agent.telemetry.telemetry import AgentMetrics
 
 
 class CLIRenderer:
@@ -48,3 +49,13 @@ class CLIRenderer:
         if self._streaming:
             print()
             self._streaming = False
+
+    def render_metrics(
+        self,
+        metrics: AgentMetrics,
+        context_window: int = 128_000,
+    ) -> None:
+        self.finish()
+        print("\n── Task metrics ───────────────────")
+        print(metrics.report(context_window))
+        print("───────────────────────────────────")
