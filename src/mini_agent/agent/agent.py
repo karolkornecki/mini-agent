@@ -1,6 +1,8 @@
 import json
+from collections.abc import Callable
 from typing import Any
 
+from mini_agent.agent.events import AgentEvent, TextDelta, ToolFinished, ToolStarted
 from mini_agent.llm.client import LLMClient
 from mini_agent.permissions.approval import request_approval
 from mini_agent.permissions.permissions import Permission, get_permission
@@ -30,8 +32,13 @@ Never read secrets or environment files.
 """
 
 class Agent:
-    def __init__(self, llm: LLMClient) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        on_event: Callable[[AgentEvent], None] | None = None,
+    ) -> None:
         self.llm = llm
+        self.on_event = on_event or (lambda event: None)
         self.metrics = AgentMetrics()
         self.messages: list[dict[str, Any]] = [
             {
@@ -63,10 +70,8 @@ class Agent:
             response, metrics = self.llm.complete_stream(
                 messages=messages,
                 tools=get_tool_schemas(),
-                on_text=lambda text: print(text, end="", flush=True),
+                on_text=lambda text: self.on_event(TextDelta(text)),
             )
-            if response.content:
-                print()
 
             self.metrics.llm_calls.append(metrics)
 
@@ -80,16 +85,26 @@ class Agent:
                 self.metrics.tool_calls += 1
 
                 name = call.function.name
-                tool = REGISTRY.get(name)
+                arguments = {}
+                status = "success"
 
                 try:
-                    if tool is None:
-                        raise ValueError(f"Unknown tool: {name}")
-
                     arguments = json.loads(call.function.arguments)
 
                     if not isinstance(arguments, dict):
                         raise ValueError("Arguments must be an object")
+
+                    self.on_event(
+                        ToolStarted(
+                            call_id=call.id,
+                            name=name,
+                            arguments=arguments,
+                        )
+                    )
+
+                    tool = REGISTRY.get(name)
+                    if tool is None:
+                        raise ValueError(f"Unknown tool: {name}")
 
                     permission = get_permission(name)
 
@@ -98,30 +113,30 @@ class Agent:
 
                     if permission == Permission.ASK:
                         if not request_approval(name, arguments):
+                            status = "denied"
                             output = f"User rejected execution of {name}"
-
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": call.id,
-                                    "content": output,
-                                }
-                            )
-                            continue
-
-                    with tool_trace(name) as observation:
-                        try:
-                            result = tool.execute(**arguments)
-                        except Exception as exc:
-                            observation.update(
-                                level="ERROR",
-                                status_message=type(exc).__name__,
-                            )
-                            raise
-                    output = json.dumps(
-                        result,
-                        ensure_ascii=False,
-                    )
+                        else:
+                            with tool_trace(name) as observation:
+                                try:
+                                    result = tool.execute(**arguments)
+                                except Exception as exc:
+                                    observation.update(
+                                        level="ERROR",
+                                        status_message=type(exc).__name__,
+                                    )
+                                    raise
+                            output = json.dumps(result, ensure_ascii=False)
+                    else:
+                        with tool_trace(name) as observation:
+                            try:
+                                result = tool.execute(**arguments)
+                            except Exception as exc:
+                                observation.update(
+                                    level="ERROR",
+                                    status_message=type(exc).__name__,
+                                )
+                                raise
+                        output = json.dumps(result, ensure_ascii=False)
 
                 except (
                     ValueError,
@@ -130,8 +145,18 @@ class Agent:
                     PermissionError,
                     KeyError,
                 ) as exc:
+                    status = "error"
                     self.metrics.tool_errors += 1
                     output = f"Tool error: {exc}"
+
+                self.on_event(
+                    ToolFinished(
+                        call_id=call.id,
+                        name=name,
+                        status=status,
+                        output=output,
+                    )
+                )
 
                 messages.append(
                     {

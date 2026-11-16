@@ -1,10 +1,12 @@
 from collections.abc import Callable
 
 from mini_agent.agent.agent import Agent
+from mini_agent.cli.renderer import CLIRenderer
 
 
 def run_cli(
     agent: Agent,
+    renderer: CLIRenderer,
     read_input: Callable[[str], str] = input,
 ) -> None:
     print("Mini Agent")
@@ -30,7 +32,10 @@ def run_cli(
             continue
 
         try:
-            result = agent.run(task)
-            print(f"\n{result}\n")
+            agent.run(task)
         except Exception as exc:
-            print(f"\nError: {exc}\n")
+            print(f"\nError: {exc}")
+        finally:
+            renderer.finish()
+
+        print()
