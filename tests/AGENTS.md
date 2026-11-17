@@ -42,14 +42,17 @@ reports are ignored by git. Do not add real API calls to the default test suite.
   `final_response()`, and `fake_metrics()`. The fake implements `complete_stream`,
   records requests, and consumes scripted responses. Include a final response
   without tool calls to terminate a successful run.
-- Patch dependencies where they are used. For agent tests, patch `agent_trace`,
-  `tool_trace`, and `request_approval` on `mini_agent.agent.agent`; examples live
-  in `integration/test_agent_permissions.py`. For SDK stream tests, patch
+- Patch dependencies where they are used: `agent_trace` on
+  `mini_agent.agent.agent`, and `tool_trace` or `get_permission` on
+  `mini_agent.agent.tool_execution`. Examples live in
+  `integration/test_agent_permissions.py` and `unit/test_tool_execution.py`.
+  For SDK stream tests, patch
   `mini_agent.llm.client.llm_trace`. Keep Langfuse and OpenRouter out of offline tests.
 - `request_approval()` and `run_cli()` bind `input` as a default argument.
   Pass `ask=` or `read_input=` explicitly in their unit tests. To control the
-  agent's approval path, replace `agent_module.request_approval`; patching
-  `builtins.input` alone does not replace the already-bound default.
+  agent's approval path, pass `Agent(..., approve=callback)`. Direct
+  `execute_tool()` tests supply `approve=` too. Patching `builtins.input` alone
+  does not replace the already-bound default.
 - Mock `subprocess.run` for command tests and Langfuse's `get_client` for
   observability tests. Use `capsys` for renderer output and collected events
   when testing event emission.
@@ -63,6 +66,7 @@ reports are ignored by git. Do not add real API calls to the default test suite.
 | Tool schemas or registrations | `unit/test_registry.py` |
 | Command allowlist, execution, timeouts | `unit/test_run_command.py` |
 | Permission policy and user approval | `unit/test_permissions.py`, `unit/test_approval.py`, `integration/test_agent_permissions.py` |
+| Tool lifecycle events, results, error accounting, timeout recovery | `unit/test_tool_execution.py`, `integration/test_agent_permissions.py` |
 | Conversation history or reset | `unit/test_conversation.py` |
 | Streaming text, tool-call fragments, usage | `unit/test_llm_stream.py` |
 | CLI input and event rendering | `unit/test_cli.py`, `unit/test_cli_renderer.py` |

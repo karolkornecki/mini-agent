@@ -33,10 +33,10 @@ This supplements the [root guide](../../../AGENTS.md) for this directory.
   `apply_patch()` accepts a unified diff for one existing file, validates context,
   and rejects creation, deletion, and renaming. Preserve the original file when
   validation fails; check the final size before writing.
-- Keep return values JSON-serializable. The agent serializes successful results
-  with `json.dumps(..., ensure_ascii=False)` and handles selected exception types
-  as tool-error messages. If introducing a new error type, inspect the agent's
-  exception boundary rather than assuming it will be caught.
+- Keep return values JSON-serializable. `agent/tool_execution.py` serializes
+  successful results with `json.dumps(..., ensure_ascii=False)` and handles selected exception types
+  as tool-error messages. If introducing a new error type, inspect
+  [tool execution](../agent/tool_execution.py) to determine how it is handled.
 
 ## Commands
 
@@ -46,8 +46,9 @@ The registry derives the command schema enum from that mapping.
 
 Preserve argument-list execution without a shell, `cwd=paths.ROOT`, the 30-second
 timeout, captured stdout/stderr, and 10,000-character truncation of each stream.
-A nonzero exit code is returned in the result text; a subprocess exception can
-propagate. Command tests mock subprocess execution rather than running commands
-inside the test process.
+A nonzero exit code is returned in the result text. The raw tool propagates
+subprocess exceptions; `execute_tool()` turns `TimeoutExpired` into a tool-error
+result so the model can continue. Command tests mock subprocess execution rather
+than running commands inside the test process.
 
 See [the test guide](../../../tests/AGENTS.md) for fixtures and targeted checks.

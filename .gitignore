@@ -226,3 +226,4 @@ __marimo__/
 
 /test-results/*
 !/test-results/.gitkeep
+/.agent/skills/mini-agent-guided-development/SKILL.md

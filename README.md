@@ -65,6 +65,16 @@ The agent sends a task, conversation history, and available tool definitions to 
 
 The tools support listing, reading, and searching files; creating and editing files; applying patches; and running a small set of predefined commands. Metrics track model latency, token usage, iterations, tool calls, and errors. Optional Langfuse traces record agent runs, model calls, and tool execution.
 
+`Agent` owns the conversation and model loop. For each tool call, it delegates to
+`execute_tool()`, which parses arguments, delegates permission checks and invocation
+to `execute_with_permission()`, emits lifecycle events, updates tool metrics, and
+returns the complete tool-result message. `execute_with_permission()` takes the
+tool's callable, checks policy, requests approval when needed, and traces the
+permitted execution. Approval is a callback supplied to `Agent`; it defaults to
+the terminal prompt. Command timeouts become tool-error results
+so the model can continue. Other unhandled exceptions and event-callback failures
+propagate. [GLOSSARY.md](GLOSSARY.md) defines the tool execution terms.
+
 ## Directory structure
 
 The main files and directories are:
@@ -75,7 +85,8 @@ mini-agent/
 │   └── mini_agent/
 │       ├── main.py               # Entry point, CLI wiring, and final metrics output
 │       ├── agent/
-│       │   ├── agent.py          # Conversation loop, tool execution, and permission checks
+│       │   ├── agent.py          # Conversation history, model loop, and task metrics
+│       │   ├── tool_execution.py # Tool lifecycle, permission checks, events, and results
 │       │   └── events.py         # Streamed text and tool lifecycle events
 │       ├── cli/
 │       │   ├── cli.py            # Interactive tasks, /clear, and /exit
@@ -104,6 +115,7 @@ mini-agent/
 ├── tests/                       # Unit, fake-LLM integration, and opt-in live tests
 │   └── AGENTS.md                 # Test fixtures, fakes, and coverage map
 ├── AGENTS.md                     # Repository guidance for coding agents
+├── GLOSSARY.md                   # Tool execution terminology
 ├── .env.example                 # Environment configuration template
 ├── pyproject.toml               # Package metadata, dependencies, and tool settings
 ├── uv.lock                      # Locked dependency versions
