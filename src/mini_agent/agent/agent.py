@@ -1,19 +1,13 @@
-import json
 from collections.abc import Callable
 from typing import Any
 
-from mini_agent.agent.events import (
-    AgentEvent,
-    TextDelta,
-    ToolFinished,
-    ToolStarted,
-)
+from mini_agent.agent.events import AgentEvent, TextDelta
+from mini_agent.agent.tool_execution import execute_tool
 from mini_agent.llm.client import LLMClient
 from mini_agent.permissions.approval import request_approval
-from mini_agent.permissions.permissions import Permission, get_permission
-from mini_agent.telemetry.observability import agent_trace, tool_trace
+from mini_agent.telemetry.observability import agent_trace
 from mini_agent.telemetry.telemetry import AgentMetrics
-from mini_agent.tools.registry import REGISTRY, get_tool_schemas
+from mini_agent.tools.registry import get_tool_schemas
 
 SYSTEM_PROMPT = """
 You are a coding assistant operating in the current repository.
@@ -36,9 +30,12 @@ class Agent:
         self,
         llm: LLMClient,
         on_event: Callable[[AgentEvent], None] | None = None,
+        *,
+        approve: Callable[[str, dict[str, Any]], bool] = request_approval,
     ) -> None:
         self.llm = llm
         self.on_event = on_event or (lambda event: None)
+        self.approve = approve
         self.metrics = AgentMetrics()
         self.messages: list[dict[str, Any]] = [
             {
@@ -84,98 +81,13 @@ class Agent:
                 return response.content or ""
 
             for call in response.tool_calls:
-                self.metrics.tool_calls += 1
-
-                name = call.function.name
-                status = "success"
-                arguments: dict[str, Any] = {}
-
-                try:
-                    parsed = json.loads(call.function.arguments)
-
-                    if not isinstance(parsed, dict):
-                        raise ValueError("Arguments must be an object")
-
-                    arguments = parsed
-
-                except (ValueError, TypeError) as exc:
-                    self.on_event(
-                        ToolStarted(
-                            call_id=call.id,
-                            name=name,
-                            arguments={},
-                        )
-                    )
-
-                    status = "error"
-                    self.metrics.tool_errors += 1
-                    output = f"Tool error: {exc}"
-
-                else:
-                    self.on_event(
-                        ToolStarted(
-                            call_id=call.id,
-                            name=name,
-                            arguments=arguments,
-                        )
-                    )
-
-                    try:
-                        tool = REGISTRY.get(name)
-
-                        if tool is None:
-                            raise ValueError(f"Unknown tool: {name}")
-
-                        permission = get_permission(name)
-
-                        if permission == Permission.DENY:
-                            raise PermissionError(f"Tool denied: {name}")
-
-                        if permission == Permission.ASK and not request_approval(name, arguments):
-                            status = "denied"
-                            output = f"User rejected execution of {name}"
-                        else:
-                            with tool_trace(name) as observation:
-                                try:
-                                    result = tool.execute(**arguments)
-                                except Exception as exc:
-                                    observation.update(
-                                        level="ERROR",
-                                        status_message=type(exc).__name__,
-                                    )
-                                    raise
-
-                            output = json.dumps(
-                                result,
-                                ensure_ascii=False,
-                            )
-
-                    except (
-                        ValueError,
-                        TypeError,
-                        OSError,
-                        PermissionError,
-                        KeyError,
-                    ) as exc:
-                        status = "error"
-                        self.metrics.tool_errors += 1
-                        output = f"Tool error: {exc}"
-
-                self.on_event(
-                    ToolFinished(
-                        call_id=call.id,
-                        name=name,
-                        status=status,
-                        output=output,
-                    )
-                )
-
                 messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": output,
-                    }
+                    execute_tool(
+                        call,
+                        metrics=self.metrics,
+                        on_event=self.on_event,
+                        approve=self.approve,
+                    )
                 )
 
         raise RuntimeError("Max iterations exceeded")

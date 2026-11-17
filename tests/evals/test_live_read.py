@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 from dotenv import load_dotenv
 
+import mini_agent.agent.tool_execution as execution_module
 from mini_agent.agent.agent import Agent
 from mini_agent.llm.client import LLMClient
 from tests.evals.reporting import save_report
@@ -46,23 +48,21 @@ def test_live_read_file(
     )
 
     # No interactive approvals.
-    def fail_approval(prompt: str) -> str:
-        raise AssertionError(f"Unexpected approval: {prompt}")
-
-    monkeypatch.setattr("builtins.input", fail_approval)
+    def fail_approval(name: str, arguments: dict[str, Any]) -> bool:
+        raise AssertionError(f"Unexpected approval: {name}")
 
     # Defense in depth: reject every tool except read_file.
     from mini_agent.permissions.permissions import Permission
 
     monkeypatch.setattr(
-        agent_module,
+        execution_module,
         "get_permission",
         lambda name: Permission.ALLOW if name == "read_file" else Permission.DENY,
     )
 
     # Construct LLMClient using existing project configuration.
     llm = LLMClient()
-    agent = Agent(llm=llm)
+    agent = Agent(llm=llm, approve=fail_approval)
 
     passed = False
 

@@ -42,7 +42,8 @@ uv run --locked ruff check .
 | `src/mini_agent/main.py` | Load dotenv, wire the agent and renderer, start the CLI, print metrics and flush traces on exit. |
 | `src/mini_agent/cli/cli.py` | Interactive input loop, `/clear`, `/exit`, and task error display. |
 | `src/mini_agent/cli/renderer.py` | Render streamed text and tool events in the terminal. |
-| `src/mini_agent/agent/agent.py` | System prompt, conversation state, model/tool loop, permissions, events, metrics. |
+| `src/mini_agent/agent/agent.py` | System prompt, conversation state, model loop, task metrics, and approval callback wiring. |
+| `src/mini_agent/agent/tool_execution.py` | Per-call arguments, registry lookup, permission-checked invocation, tracing, events, tool metrics, and result messages. |
 | `src/mini_agent/agent/events.py` | Frozen `TextDelta`, `ToolStarted`, and `ToolFinished` event dataclasses. |
 | `src/mini_agent/llm/client.py` | OpenAI SDK client pointed at OpenRouter; reconstruct streamed text/tool calls and collect usage. |
 | `src/mini_agent/tools/` | Plain tool functions, shared path checks, schemas, registry, command allowlist. Read [its guide](src/mini_agent/tools/AGENTS.md) when changing tools. |
@@ -63,13 +64,21 @@ The project/console command is `mini-agent`; Python imports use `mini_agent`.
   across successful turns. `_run()` works on a copy and commits it to
   `self.messages` only upon a response without tool calls. `/clear` keeps only the
   system message. The loop currently permits 150 model iterations per task.
-- Every tool call needs a matching tool-result message with its `tool_call_id`,
-  including rejection/error results, so the model can continue. Tool outputs are
+- `execute_tool()` returns a matching tool-result message with its `tool_call_id`
+  for success, rejection, and handled errors. It owns the started/finished events
+  and tool counters; `Agent` appends its returned message. Tool outputs are
   JSON-encoded on success. A rejected approval is `denied` without incrementing
   `tool_errors`; policy denial and handled tool exceptions are `error` and do
-  increment it.
+  increment it. Handled exceptions are `ValueError`, `TypeError`, `OSError`
+  (including `PermissionError`), `KeyError`, and `TimeoutExpired`. Other exceptions
+  and event-callback failures propagate.
+- `execute_with_permission()` in `agent/tool_execution.py` takes the tool's
+  callable and checks policy and approval before tracing and invoking it.
+  Policy denial raises `PermissionError`; user rejection raises `ApprovalRejected`,
+  which `execute_tool()` translates to the `denied` outcome.
 - Keep terminal rendering in `cli/renderer.py` through the event callback.
-  Approval prompting lives separately in `permissions/approval.py`.
+  Approval prompting lives separately in `permissions/approval.py`; pass
+  `approve=` to `Agent` to replace that prompt with a callback.
 - File tools use `tools.paths.ROOT`, captured from the working directory at import
   time. Changing directory later does not update it. Preserve shared path checks,
   blocked paths, size limits, and the explicit command allowlist.
