@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+_TOOL_OUTPUT_TRUNCATION_SUFFIX = "\n[Tool result truncated]"
+
 
 class ContextLevel(StrEnum):
     UNKNOWN = "unknown"
@@ -15,6 +17,7 @@ class ContextSettings:
     output_reserve: int = 8192
     warning_percent: int = 80
     critical_percent: int = 95
+    max_tool_output_chars: int = 16_000
 
     def __post_init__(self) -> None:
         if self.context_window <= 0:
@@ -25,10 +28,19 @@ class ContextSettings:
             raise ValueError(
                 "thresholds must satisfy 0 < warning_percent < critical_percent <= 100"
             )
+        minimum = len(_TOOL_OUTPUT_TRUNCATION_SUFFIX)
+        if not isinstance(self.max_tool_output_chars, int) or self.max_tool_output_chars < minimum:
+            raise ValueError(f"max_tool_output_chars must be an integer of at least {minimum}")
 
     @property
     def input_capacity(self) -> int:
         return self.context_window - self.output_reserve
+
+    def truncate_tool_output(self, content: str) -> str:
+        if len(content) <= self.max_tool_output_chars:
+            return content
+        preview_length = self.max_tool_output_chars - len(_TOOL_OUTPUT_TRUNCATION_SUFFIX)
+        return content[:preview_length] + _TOOL_OUTPUT_TRUNCATION_SUFFIX
 
 
 @dataclass(frozen=True)

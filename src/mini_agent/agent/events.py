@@ -27,6 +27,11 @@ class ContextWarning:
 
 
 @dataclass(frozen=True)
+class HistoryTruncated:
+    """One older turn was removed from the working conversation."""
+
+
+@dataclass(frozen=True)
 class ToolStarted:
     call_id: str
     name: str
@@ -41,4 +46,6 @@ class ToolFinished:
     output: str
 
 
-type AgentEvent = TextDelta | ContextUsage | ContextWarning | ToolStarted | ToolFinished
+type AgentEvent = (
+    TextDelta | ContextUsage | ContextWarning | HistoryTruncated | ToolStarted | ToolFinished
+)

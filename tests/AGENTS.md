@@ -76,6 +76,7 @@ reports are ignored by git. Do not add real API calls to the default test suite.
 | Permission policy and user approval | `unit/test_permissions.py`, `unit/test_approval.py`, `integration/test_agent_permissions.py` |
 | Tool lifecycle events, results, error accounting, timeout recovery | `unit/test_tool_execution.py`, `integration/test_agent_permissions.py` |
 | Conversation history or reset | `unit/test_conversation.py` |
+| Whole-turn pruning, tool result caps, and valid outgoing tool batches | `integration/test_context_truncation.py` |
 | Streaming text, tool-call fragments, usage | `unit/test_llm_stream.py` |
 | Context measurements, unknown usage, task resets and failures | `unit/test_telemetry.py`, `integration/test_context_monitoring.py` |
 | Capacity thresholds, warning repetition, output limits | `unit/test_context.py`, `unit/test_llm_stream.py`, `integration/test_context_monitoring.py` |

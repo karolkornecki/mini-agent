@@ -234,7 +234,7 @@ def test_warning_state_resets_each_task_with_shared_capacity_settings() -> None:
     ]
     assert previous_metrics is not agent.metrics
     assert previous_metrics.context_settings is agent.metrics.context_settings is settings
-    assert len(agent.messages) == 5
+    assert [message["content"] for message in agent.messages[1:]] == ["Second task", "Second"]
 
 
 @pytest.mark.integration

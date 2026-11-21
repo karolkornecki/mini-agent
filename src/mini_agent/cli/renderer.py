@@ -4,6 +4,7 @@ from mini_agent.agent.events import (
     AgentEvent,
     ContextUsage,
     ContextWarning,
+    HistoryTruncated,
     TextDelta,
     ToolFinished,
     ToolStarted,
@@ -46,6 +47,10 @@ class CLIRenderer:
                     f"{input_tokens:,} / {input_capacity:,} input tokens "
                     f"({utilization:.1f}% of input capacity)"
                 )
+
+            case HistoryTruncated():
+                self._finish_stream()
+                print("Context: removed 1 older turn")
 
             case ToolStarted(name=name, arguments=arguments):
                 self._finish_stream()
