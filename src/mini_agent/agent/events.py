@@ -8,6 +8,14 @@ class TextDelta:
 
 
 @dataclass(frozen=True)
+class ContextUsage:
+    iteration: int
+    input_tokens: int | None
+    context_window: int
+    utilization_percent: float | None
+
+
+@dataclass(frozen=True)
 class ToolStarted:
     call_id: str
     name: str
@@ -22,4 +30,4 @@ class ToolFinished:
     output: str
 
 
-type AgentEvent = TextDelta | ToolStarted | ToolFinished
+type AgentEvent = TextDelta | ContextUsage | ToolStarted | ToolFinished

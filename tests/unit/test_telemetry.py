@@ -1,3 +1,5 @@
+import pytest
+
 from mini_agent.telemetry.telemetry import (
     AgentMetrics,
     LLMCallMetrics,
@@ -24,9 +26,11 @@ def test_context_utilization():
         ]
     )
 
-    report = metrics.report(context_window=128000)
+    report = metrics.report()
 
-    assert "Context utilization: 50.0%" in report
+    assert metrics.context_input_tokens == 64000
+    assert metrics.context_utilization_percent == 50.0
+    assert "Context utilization (last request): 50.0%" in report
     assert "Input tokens total: 65000" in report
 
 
@@ -38,7 +42,47 @@ def test_empty_metrics() -> None:
     assert "LLM calls: 0" in report
     assert "Input tokens total: 0" in report
     assert "Cached tokens total: 0" in report
-    assert "Context utilization: 0.0%" in report
+    assert metrics.context_input_tokens is None
+    assert metrics.context_utilization_percent is None
+    assert "Context utilization (last request): unknown" in report
+
+
+@pytest.mark.parametrize(
+    ("input_tokens", "expected_percent"),
+    [(0, 0.0), (125, 12.5), (1500, 150.0)],
+)
+def test_context_utilization_uses_configured_capacity(input_tokens, expected_percent) -> None:
+    metrics = AgentMetrics(
+        context_window=1000,
+        llm_calls=[LLMCallMetrics(1.0, input_tokens, 500, cached_tokens=input_tokens)],
+    )
+
+    assert metrics.context_input_tokens == input_tokens
+    assert metrics.context_utilization_percent == expected_percent
+    assert f"Context utilization (last request): {expected_percent:.1f}%" in metrics.report()
+
+
+def test_missing_latest_usage_does_not_reuse_previous_measurement() -> None:
+    metrics = AgentMetrics(
+        context_window=1000,
+        llm_calls=[
+            LLMCallMetrics(1.0, 500, 100),
+            LLMCallMetrics(1.0, 0, 0, usage_available=False),
+        ],
+    )
+
+    assert metrics.context_input_tokens is None
+    assert metrics.context_utilization_percent is None
+    assert metrics.input_tokens_total == 500
+    assert metrics.output_tokens_total == 100
+    assert "Context utilization (last request): unknown" in metrics.report()
+
+
+@pytest.mark.parametrize("context_window", [0, -1])
+def test_nonpositive_context_window_is_rejected(context_window) -> None:
+    with pytest.raises(ValueError, match="context_window must be a positive integer"):
+        AgentMetrics(context_window=context_window)
+
 
 def test_elapsed_time_non_negative():
     metrics = AgentMetrics()
@@ -75,6 +119,7 @@ def test_metrics_totals() -> None:
 
 def test_metrics_report() -> None:
     metrics = AgentMetrics(
+        context_window=1000,
         llm_calls=[
             LLMCallMetrics(
                 latency_seconds=1.0,
@@ -88,7 +133,7 @@ def test_metrics_report() -> None:
         tool_errors=0,
     )
 
-    report = metrics.report(context_window=1000)
+    report = metrics.report()
 
     assert "LLM calls: 1" in report
     assert "Tool calls: 2" in report
@@ -96,4 +141,4 @@ def test_metrics_report() -> None:
     assert "Input tokens total: 100" in report
     assert "Output tokens total: 20" in report
     assert "Cached tokens total: 40" in report
-    assert "Context utilization: 10.0%" in report
+    assert "Context utilization (last request): 10.0%" in report

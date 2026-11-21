@@ -78,6 +78,7 @@ def test_stream_reconstructs_text():
     assert metrics.input_tokens == 10
     assert metrics.output_tokens == 3
     assert metrics.cached_tokens == 2
+    assert metrics.usage_available is True
 
     llm.client.chat.completions.create.assert_called_once()
     assert llm.client.chat.completions.create.call_args.kwargs["stream"] is True
@@ -128,3 +129,26 @@ def test_stream_reconstructs_tool_calls():
 
     assert metrics.input_tokens == 0
     assert metrics.output_tokens == 0
+    assert metrics.cached_tokens == 0
+    assert metrics.usage_available is False
+
+
+def test_reported_zero_usage_is_available() -> None:
+    llm = make_client(
+        [
+            chunk(
+                usage=SimpleNamespace(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    prompt_tokens_details=None,
+                )
+            ),
+        ]
+    )
+
+    with patch("mini_agent.llm.client.llm_trace"):
+        _, metrics = llm.complete_stream(messages=[], tools=[], on_text=lambda text: None)
+
+    assert metrics.input_tokens == 0
+    assert metrics.output_tokens == 0
+    assert metrics.usage_available is True
