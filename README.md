@@ -36,9 +36,9 @@ You can also run the Python module with `uv run python -m mini_agent.main`.
 The project and command are named `mini-agent`; the Python package is `mini_agent`.
 
 Enter a task at the interactive `>` prompt. The agent streams its response and
-shows tool activity in the terminal. Conversation history is retained between
-tasks; use `/clear` to reset it and `/exit` to quit. Metrics for the latest task
-are printed when the CLI exits.
+shows tool activity and context usage in the terminal. Conversation history is
+retained between tasks; use `/clear` to reset it and `/exit` to quit. Metrics for
+the latest task are printed after each task, including failed tasks.
 
 File tools operate relative to the directory where you start the program. The
 agent asks for approval before creating or editing files or running commands.
@@ -51,7 +51,7 @@ The application loads settings from `.env`. The example file contains these sett
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | Required API key for model requests through OpenRouter. | Placeholder; replace with your key. |
 | `MODEL` | OpenRouter model identifier. | `qwen/qwen3-coder` |
-| `MODEL_CONTEXT_WINDOW` | Context window size in tokens, used to calculate utilization in the metrics report. It does not change the model's actual limit. | `128000` |
+| `MODEL_CONTEXT_WINDOW` | Positive integer context capacity in tokens, used for per-request utilization and the task report. Defaults to `128000` when absent; invalid values stop startup. It does not change the model's actual limit. | `128000` |
 | `LANGFUSE_TRACING_ENABLED` | Enable or disable Langfuse tracing. | `false` |
 | `LANGFUSE_PUBLIC_KEY` | Public key for your Langfuse project. | Commented out. |
 | `LANGFUSE_SECRET_KEY` | Secret key for your Langfuse project. | Commented out. |
@@ -65,6 +65,30 @@ The agent sends a task, conversation history, and available tool definitions to 
 
 The tools support listing, reading, and searching files; creating and editing files; applying patches; and running a small set of predefined commands. Metrics track model latency, token usage, iterations, tool calls, and errors. Optional Langfuse traces record agent runs, model calls, and tool execution.
 
+After every completed model request, the CLI reports the provider's input-token
+count divided by the configured context capacity. For example:
+
+```text
+Context (last request, iteration 1): 12,800 / 128,000 tokens (10.0%)
+```
+
+This estimates the context sent in that request, including conversation history
+and tool definitions. It excludes the generated response and any later tool
+results. Cumulative input-token totals count usage across requests and are
+reported separately. Percentages above 100% are displayed as calculated.
+
+When the provider omits usage, that request's context is `unknown`; a reported
+zero is `0.0%`. Token totals sum the usage received, with missing usage contributing
+zero. A failed request produces no context measurement, so the task report uses
+the latest completed request, or `unknown` if none completed. Each task starts
+with fresh metrics; `/clear` resets conversation history only.
+
+`AgentMetrics(context_window=...)` exposes `context_input_tokens` and
+`context_utilization_percent` for the latest request, returning `None` when
+unknown. The existing `llm_calls` list retains per-request token counts and
+`usage_available`. `Agent` emits a `ContextUsage` event after recording each
+request, before executing its tool calls; the CLI renderer handles its display.
+
 `Agent` owns the conversation and model loop. For each tool call, it delegates to
 `execute_tool()`, which parses arguments, delegates permission checks and invocation
 to `execute_with_permission()`, emits lifecycle events, updates tool metrics, and
@@ -73,7 +97,7 @@ tool's callable, checks policy, requests approval when needed, and traces the
 permitted execution. Approval is a callback supplied to `Agent`; it defaults to
 the terminal prompt. Command timeouts become tool-error results
 so the model can continue. Other unhandled exceptions and event-callback failures
-propagate. [GLOSSARY.md](GLOSSARY.md) defines the tool execution terms.
+propagate. [GLOSSARY.md](GLOSSARY.md) defines the tool execution and context terms.
 
 ## Directory structure
 
@@ -87,7 +111,7 @@ mini-agent/
 │       ├── agent/
 │       │   ├── agent.py          # Conversation history, model loop, and task metrics
 │       │   ├── tool_execution.py # Tool lifecycle, permission checks, events, and results
-│       │   └── events.py         # Streamed text and tool lifecycle events
+│       │   └── events.py         # Streamed text, context usage, and tool lifecycle events
 │       ├── cli/
 │       │   ├── cli.py            # Interactive tasks, /clear, and /exit
 │       │   └── renderer.py       # Terminal rendering for agent events
@@ -115,7 +139,7 @@ mini-agent/
 ├── tests/                       # Unit, fake-LLM integration, and opt-in live tests
 │   └── AGENTS.md                 # Test fixtures, fakes, and coverage map
 ├── AGENTS.md                     # Repository guidance for coding agents
-├── GLOSSARY.md                   # Tool execution terminology
+├── GLOSSARY.md                   # Tool execution and context terminology
 ├── .env.example                 # Environment configuration template
 ├── pyproject.toml               # Package metadata, dependencies, and tool settings
 ├── uv.lock                      # Locked dependency versions

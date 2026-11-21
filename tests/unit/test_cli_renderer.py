@@ -1,5 +1,8 @@
 from unittest.mock import Mock
 
+import pytest
+
+from mini_agent.agent.events import ContextUsage, TextDelta, ToolStarted
 from mini_agent.cli.cli import run_cli
 from mini_agent.cli.renderer import CLIRenderer
 from mini_agent.telemetry.telemetry import (
@@ -105,6 +108,7 @@ def test_renderer_displays_metrics(capsys) -> None:
     renderer = CLIRenderer()
 
     metrics = AgentMetrics(
+        context_window=1000,
         llm_calls=[
             LLMCallMetrics(
                 latency_seconds=0.5,
@@ -117,7 +121,7 @@ def test_renderer_displays_metrics(capsys) -> None:
         tool_errors=1,
     )
 
-    renderer.render_metrics(metrics, context_window=1000)
+    renderer.render_metrics(metrics)
 
     output = capsys.readouterr().out
 
@@ -127,4 +131,29 @@ def test_renderer_displays_metrics(capsys) -> None:
     assert "Input tokens total: 150" in output
     assert "Output tokens total: 50" in output
     assert "Cached tokens total: 25" in output
-    assert "Context utilization: 15.0%" in output
+    assert "Context utilization (last request): 15.0%" in output
+
+
+@pytest.mark.parametrize(
+    ("input_tokens", "utilization", "expected"),
+    [
+        (12800, 10.0, "12,800 / 128,000 tokens (10.0%)"),
+        (0, 0.0, "0 / 128,000 tokens (0.0%)"),
+        (None, None, "unknown"),
+    ],
+)
+def test_context_usage_finishes_stream_before_tools(
+    capsys, input_tokens, utilization, expected
+) -> None:
+    renderer = CLIRenderer()
+    renderer.render(TextDelta("Inspecting files."))
+    renderer.render(ContextUsage(1, input_tokens, 128000, utilization))
+    renderer.render(ToolStarted("call_1", "read_file", {"path": "README.md"}))
+    renderer.finish()
+
+    output = capsys.readouterr().out
+    assert output == (
+        "Inspecting files.\n"
+        f"Context (last request, iteration 1): {expected}\n"
+        '\n→ read_file\n{\n  "path": "README.md"\n}\n'
+    )

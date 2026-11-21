@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from mini_agent.agent.events import AgentEvent, TextDelta
+from mini_agent.agent.events import AgentEvent, ContextUsage, TextDelta
 from mini_agent.agent.tool_execution import execute_tool
 from mini_agent.llm.client import LLMClient
 from mini_agent.permissions.approval import request_approval
@@ -32,11 +32,13 @@ class Agent:
         on_event: Callable[[AgentEvent], None] | None = None,
         *,
         approve: Callable[[str, dict[str, Any]], bool] = request_approval,
+        context_window: int = 128_000,
     ) -> None:
         self.llm = llm
         self.on_event = on_event or (lambda event: None)
         self.approve = approve
-        self.metrics = AgentMetrics()
+        self.context_window = context_window
+        self.metrics = AgentMetrics(context_window=self.context_window)
         self.messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -45,7 +47,7 @@ class Agent:
         ]
 
     def run(self, task: str) -> str:
-        self.metrics = AgentMetrics()
+        self.metrics = AgentMetrics(context_window=self.context_window)
 
         with agent_trace() as trace:
             try:
@@ -74,6 +76,14 @@ class Agent:
             )
 
             self.metrics.llm_calls.append(metrics)
+            self.on_event(
+                ContextUsage(
+                    iteration=self.metrics.iterations,
+                    input_tokens=self.metrics.context_input_tokens,
+                    context_window=self.metrics.context_window,
+                    utilization_percent=self.metrics.context_utilization_percent,
+                )
+            )
             messages.append(response.model_dump(exclude_none=True))
 
             if not response.tool_calls:

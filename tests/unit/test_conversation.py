@@ -2,6 +2,7 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 
 from mini_agent.agent.agent import Agent
+from mini_agent.telemetry.telemetry import LLMCallMetrics
 
 
 def test_conversation_preserves_history() -> None:
@@ -19,7 +20,7 @@ def test_conversation_preserves_history() -> None:
             "content": "Done",
         }
         on_text(response.content)
-        return response, Mock()
+        return response, LLMCallMetrics(0.1, 100, 20)
 
     llm.complete_stream.side_effect = complete_stream
 

@@ -1,4 +1,3 @@
-import os
 from collections.abc import Callable
 
 from mini_agent.agent.agent import Agent
@@ -10,8 +9,6 @@ def run_cli(
     renderer: CLIRenderer,
     read_input: Callable[[str], str] = input,
 ) -> None:
-    context_window = int(os.getenv("MODEL_CONTEXT_WINDOW", "128000"))
-
     print("Mini Agent")
     print("Type /exit to quit.\n")
 
@@ -40,9 +37,6 @@ def run_cli(
             print(f"\nError: {exc}")
         finally:
             renderer.finish()
-            renderer.render_metrics(
-                agent.metrics,
-                context_window,
-            )
+            renderer.render_metrics(agent.metrics)
 
         print()

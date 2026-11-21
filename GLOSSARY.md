@@ -1,6 +1,6 @@
 # mini-agent
 
-The language used for the coding agent's tool execution.
+The language used for the coding agent's tool execution and context monitoring.
 
 ## Language
 
@@ -23,3 +23,8 @@ not a tool error.
 **Approval rejection**:
 The user's refusal to allow a tool call that requires approval.
 _Avoid_: Tool error
+
+**Context utilization**:
+The estimated percentage of configured context capacity used by the input to the
+most recently completed model request, based on provider-reported token usage.
+It is unknown when that request has no usage data.

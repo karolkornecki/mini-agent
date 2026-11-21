@@ -11,7 +11,7 @@ import pytest
 import mini_agent.agent.agent as agent_module
 import mini_agent.agent.tool_execution as execution_module
 from mini_agent.agent.agent import Agent
-from mini_agent.agent.events import AgentEvent, TextDelta, ToolFinished, ToolStarted
+from mini_agent.agent.events import AgentEvent, ContextUsage, TextDelta, ToolFinished, ToolStarted
 from mini_agent.permissions.permissions import Permission
 from tests.integration.fakes import FakeLLM, fake_metrics, final_response, tool_call_response
 
@@ -243,11 +243,13 @@ def test_timeout_returns_result_and_continues_with_remaining_calls(
         {"role": "tool", "tool_call_id": "call_read", "content": '"# Mini Agent\\n"'},
     ]
     assert events == [
+        ContextUsage(1, 100, 128000, 0.078125),
         ToolStarted("call_timeout", "run_command", {"command": "git_status"}),
         ToolFinished("call_timeout", "run_command", "error", tool_messages[0]["content"]),
         ToolStarted("call_read", "read_file", {"path": "README.md"}),
         ToolFinished("call_read", "read_file", "success", tool_messages[1]["content"]),
         TextDelta("Recovered"),
+        ContextUsage(2, 100, 128000, 0.078125),
     ]
     assert agent.metrics.iterations == 2
     assert agent.metrics.tool_calls == 2
@@ -268,7 +270,7 @@ def test_execution_uses_fresh_metrics_for_each_task(sample_project: Path) -> Non
             (final_response("Next"), fake_metrics()),
         ]
     )
-    agent = Agent(fake_llm)
+    agent = Agent(fake_llm, context_window=1000)
 
     agent.run("Read README.md")
     first_metrics = agent.metrics
@@ -278,3 +280,7 @@ def test_execution_uses_fresh_metrics_for_each_task(sample_project: Path) -> Non
     assert agent.metrics is not first_metrics
     assert agent.metrics.tool_calls == 0
     assert agent.metrics.tool_errors == 0
+    assert first_metrics.context_window == agent.metrics.context_window == 1000
+    assert first_metrics.input_tokens_total == 200
+    assert agent.metrics.input_tokens_total == 100
+    assert agent.metrics.context_utilization_percent == 10.0

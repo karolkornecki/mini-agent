@@ -2,6 +2,7 @@ import json
 
 from mini_agent.agent.events import (
     AgentEvent,
+    ContextUsage,
     TextDelta,
     ToolFinished,
     ToolStarted,
@@ -18,6 +19,18 @@ class CLIRenderer:
             case TextDelta(text=text):
                 print(text, end="", flush=True)
                 self._streaming = True
+
+            case ContextUsage(
+                iteration=iteration,
+                input_tokens=input_tokens,
+                context_window=context_window,
+                utilization_percent=utilization,
+            ):
+                self._finish_stream()
+                context = "unknown"
+                if input_tokens is not None and utilization is not None:
+                    context = f"{input_tokens:,} / {context_window:,} tokens ({utilization:.1f}%)"
+                print(f"Context (last request, iteration {iteration}): {context}")
 
             case ToolStarted(name=name, arguments=arguments):
                 self._finish_stream()
@@ -53,9 +66,8 @@ class CLIRenderer:
     def render_metrics(
         self,
         metrics: AgentMetrics,
-        context_window: int = 128_000,
     ) -> None:
         self.finish()
         print("\n── Task metrics ───────────────────")
-        print(metrics.report(context_window))
+        print(metrics.report())
         print("───────────────────────────────────")

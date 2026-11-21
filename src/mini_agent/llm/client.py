@@ -109,6 +109,7 @@ class LLMClient:
                 input_tokens=usage.prompt_tokens if usage else 0,
                 output_tokens=usage.completion_tokens if usage else 0,
                 cached_tokens=cached,
+                usage_available=usage is not None,
             )
 
             generation.update(
