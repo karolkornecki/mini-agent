@@ -55,6 +55,7 @@ The application loads settings from `.env`. The example file contains these sett
 | `MODEL_OUTPUT_RESERVE` | Positive integer space reserved for generated tokens, also sent as the request's generation limit. Must be smaller than `MODEL_CONTEXT_WINDOW`. | `8192` |
 | `CONTEXT_WARNING_PERCENT` | Integer warning threshold as a percentage of input capacity after reserving output space. | `80` |
 | `CONTEXT_CRITICAL_PERCENT` | Integer critical threshold; settings must satisfy `0 < warning < critical <= 100`. | `95` |
+| `MAX_TOOL_OUTPUT_CHARS` | Maximum Unicode characters in each tool result sent to the model, including the truncation marker. Minimum 24. | `16000` |
 | `LANGFUSE_TRACING_ENABLED` | Enable or disable Langfuse tracing. | `false` |
 | `LANGFUSE_PUBLIC_KEY` | Public key for your Langfuse project. | Commented out. |
 | `LANGFUSE_SECRET_KEY` | Secret key for your Langfuse project. | Commented out. |
@@ -84,7 +85,7 @@ When the provider omits usage, that request's context is `unknown`; a reported
 zero is `0.0%`. Token totals sum the usage received, with missing usage contributing
 zero. A failed request produces no context measurement, so the task report uses
 the latest completed request, or `unknown` if none completed. Each task starts
-with fresh metrics; `/clear` resets conversation history only.
+with fresh metrics. `/clear` resets the conversation and any pending history removal.
 
 `AgentMetrics` exposes `context_input_tokens` and `context_utilization_percent`
 for the latest request, returning `None` when unknown. The existing `llm_calls`
@@ -109,11 +110,23 @@ above 100% stay visible.
 `context.py` holds frozen `ContextSettings` and `ContextState` dataclasses. Pass
 settings with `Agent(..., context_settings=ContextSettings(...))`; the agent and
 its fresh task metrics share them. `agent.metrics.context_state` exposes the
-latest measured state for future conversation optimization and compaction.
+latest measured state for conversation history reduction.
 `ContextWarning` events carry capacity alerts separately from `ContextUsage`.
-Warnings are based on completed requests; they neither count outgoing requests
-locally nor block a request. Automatic truncation and compaction are not yet
-implemented.
+Warnings and pruning are based on provider usage from completed requests.
+
+Tool results longer than `MAX_TOOL_OUTPUT_CHARS` enter the conversation as a
+text preview ending in `[Tool result truncated]`. The preview keeps the original
+call ID. The agent still records the full output in the tool execution event.
+
+After a critical measurement, the agent drops at most one oldest completed user
+turn before the next request and reports the removal in the CLI. A full turn
+includes the user message, assistant messages, and all associated tool results.
+The system prompt and the active turn are always kept. A critical final
+measurement carries over to the next task, and warning or unknown usage does
+not trigger removal. Pruning applies to the task's working conversation.
+Successful tasks save it, while failed tasks retain the previously saved history
+and any pending pressure signal. If there is no older turn to drop, the agent
+continues with the active turn intact.
 
 Each request sends the output reserve as `max_completion_tokens`. This allowance
 covers generated tokens, including reasoning tokens when the model uses them.
@@ -145,6 +158,7 @@ mini-agent/
 │       ├── context.py            # Shared capacity settings, measured state, and warning levels
 │       ├── agent/
 │       │   ├── agent.py          # Conversation history, model loop, and task metrics
+│       │   ├── history.py        # Whole-turn history removal
 │       │   ├── tool_execution.py # Tool lifecycle, permission checks, events, and results
 │       │   └── events.py         # Streamed text, context usage, and tool lifecycle events
 │       ├── cli/

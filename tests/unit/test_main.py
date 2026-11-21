@@ -12,6 +12,7 @@ def startup(monkeypatch: pytest.MonkeyPatch) -> dict[str, Mock]:
         "MODEL_OUTPUT_RESERVE",
         "CONTEXT_WARNING_PERCENT",
         "CONTEXT_CRITICAL_PERCENT",
+        "MAX_TOOL_OUTPUT_CHARS",
     ):
         monkeypatch.delenv(name, raising=False)
     mocks = {}
@@ -34,6 +35,7 @@ def test_startup_passes_context_window_to_agent(monkeypatch, startup, configured
     assert agent.context_settings.context_window == expected
     assert agent.metrics.context_window == expected
     assert agent.metrics.context_settings is agent.context_settings
+    assert agent.context_settings.max_tool_output_chars == 16_000
     assert agent.on_event == renderer.render
     startup["flush"].assert_called_once_with()
 
@@ -55,6 +57,7 @@ def test_startup_passes_reserve_and_thresholds(monkeypatch, startup) -> None:
     monkeypatch.setenv("MODEL_OUTPUT_RESERVE", "4000")
     monkeypatch.setenv("CONTEXT_WARNING_PERCENT", "60")
     monkeypatch.setenv("CONTEXT_CRITICAL_PERCENT", "85")
+    monkeypatch.setenv("MAX_TOOL_OUTPUT_CHARS", "400")
 
     main_module.main()
 
@@ -63,6 +66,7 @@ def test_startup_passes_reserve_and_thresholds(monkeypatch, startup) -> None:
     assert agent.context_settings.warning_percent == 60
     assert agent.context_settings.critical_percent == 85
     assert agent.context_settings.input_capacity == 124000
+    assert agent.context_settings.max_tool_output_chars == 400
 
 
 @pytest.mark.parametrize(
@@ -79,6 +83,8 @@ def test_startup_passes_reserve_and_thresholds(monkeypatch, startup) -> None:
         ("CONTEXT_CRITICAL_PERCENT", "abc"),
         ("CONTEXT_CRITICAL_PERCENT", "80"),
         ("CONTEXT_CRITICAL_PERCENT", "101"),
+        ("MAX_TOOL_OUTPUT_CHARS", "abc"),
+        ("MAX_TOOL_OUTPUT_CHARS", "23"),
     ],
 )
 def test_invalid_context_settings_stop_startup(monkeypatch, startup, variable, value) -> None:

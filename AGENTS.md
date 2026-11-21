@@ -40,12 +40,13 @@ uv run --locked ruff check .
 | Location | Responsibility |
 | --- | --- |
 | `src/mini_agent/main.py` | Load dotenv, validate context capacity, wire the agent and renderer, start the CLI, and flush traces on exit. |
-| `src/mini_agent/context.py` | Frozen context settings and measured state, input capacity, remaining tokens, and warning levels. |
+| `src/mini_agent/context.py` | Frozen context settings and measured state, capacity warnings, and tool output limits. |
 | `src/mini_agent/cli/cli.py` | Interactive input loop, `/clear`, `/exit`, and task error display. |
 | `src/mini_agent/cli/renderer.py` | Render streamed text, context usage, tool events, and task metrics in the terminal. |
 | `src/mini_agent/agent/agent.py` | System prompt, conversation state, model loop, task metrics, and approval callback wiring. |
+| `src/mini_agent/agent/history.py` | Remove the oldest completed user turn from the working conversation. |
 | `src/mini_agent/agent/tool_execution.py` | Per-call arguments, registry lookup, permission-checked invocation, tracing, events, tool metrics, and result messages. |
-| `src/mini_agent/agent/events.py` | Frozen text, context measurement, capacity warning, and tool lifecycle event dataclasses. |
+| `src/mini_agent/agent/events.py` | Frozen events for text, context, history removal, and tool execution. |
 | `src/mini_agent/llm/client.py` | OpenAI SDK client pointed at OpenRouter; reconstruct streamed text/tool calls and collect usage. |
 | `src/mini_agent/tools/` | Plain tool functions, shared path checks, schemas, registry, command allowlist. Read [its guide](src/mini_agent/tools/AGENTS.md) when changing tools. |
 | `src/mini_agent/permissions/` | `ALLOW`/`ASK`/`DENY` policy and interactive approval. |
@@ -68,14 +69,17 @@ The project/console command is `mini-agent`; Python imports use `mini_agent`.
   it executes no tools from that response and keeps the prior successful history.
 - `Agent.run()` resets metrics for each task but retains conversation history
   across successful turns. `_run()` works on a copy and commits it to
-  `self.messages` only upon a response without tool calls. `/clear` keeps only the
-  system message. The loop currently permits 150 model iterations per task.
+  `self.messages` only upon a successful response without tool calls. `/clear`
+  keeps only the system message and clears pending history removal.
+  The loop currently permits 150 model iterations per task.
 - `execute_tool()` returns a matching tool-result message with its `tool_call_id`
   for success, rejection, and handled errors. It owns the started/finished events
-  and tool counters; `Agent` appends its returned message. Tool outputs are
-  JSON-encoded on success. A rejected approval is `denied` without incrementing
-  `tool_errors`; policy denial and handled tool exceptions are `error` and do
-  increment it. Handled exceptions are `ValueError`, `TypeError`, `OSError`
+  and tool counters. Successful tool outputs are JSON-encoded. `Agent` caps
+  model-facing content before appending it, preserving the call ID and the full
+  `ToolFinished` event. The `MAX_TOOL_OUTPUT_CHARS` limit includes the marker
+  for clipped results and defaults to 16000. A rejected approval is `denied`
+  without incrementing `tool_errors`. Policy denial and handled tool exceptions
+  are `error` and increment it. Handled exceptions are `ValueError`, `TypeError`, `OSError`
   (including `PermissionError`), `KeyError`, and `TimeoutExpired`. Other exceptions
   and event-callback failures propagate.
 - `execute_with_permission()` in `agent/tool_execution.py` takes the tool's
@@ -105,10 +109,15 @@ The project/console command is `mini-agent`; Python imports use `mini_agent`.
   event-callback exceptions propagate. `/clear` leaves metrics intact.
   `ContextWarning` follows `ContextUsage` only when entering or escalating a level.
   A decrease rearms warnings; unknown usage leaves alert tracking unchanged.
-  Tracking resets for each task. Capacity warnings use completed provider usage;
-  they add no local token estimator, request blocking, truncation, or compaction.
-  The output reserve also caps generated tokens. Tracing is optional; preserve
-  tested no-op fallback behavior without swallowing exceptions from execution.
+  Warning repetition tracking resets for each task. The output reserve also caps
+  generated tokens.
+- After a critical measurement, the next request can drop one oldest completed
+  user turn and emit `HistoryTruncated`. Keep the system message, active turn, and
+  complete assistant/tool batches. A successful task commits its working history
+  and carries its final critical signal into the next task. A failed task retains
+  the saved history and previously pending signal.
+- Tracing is optional. Preserve the no-op fallback and let execution exceptions
+  propagate.
 
 ## Change workflow
 

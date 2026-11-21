@@ -1,7 +1,14 @@
 from collections.abc import Callable
 from typing import Any
 
-from mini_agent.agent.events import AgentEvent, ContextUsage, ContextWarning, TextDelta
+from mini_agent.agent.events import (
+    AgentEvent,
+    ContextUsage,
+    ContextWarning,
+    HistoryTruncated,
+    TextDelta,
+)
+from mini_agent.agent.history import remove_oldest_turn
 from mini_agent.agent.tool_execution import execute_tool
 from mini_agent.context import ContextLevel, ContextSettings
 from mini_agent.llm.client import LLMClient
@@ -42,6 +49,7 @@ class Agent:
             context_settings if context_settings is not None else ContextSettings()
         )
         self.metrics = AgentMetrics(context_settings=self.context_settings)
+        self._prune_before_next_task = False
         self.messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -69,9 +77,13 @@ class Agent:
         messages = self.messages.copy()
         messages.append({"role": "user", "content": task})
         last_context_level = ContextLevel.NORMAL
+        prune_before_request = self._prune_before_next_task
 
         for _ in range(150):
             self.metrics.iterations += 1
+
+            if prune_before_request and remove_oldest_turn(messages):
+                self.on_event(HistoryTruncated())
 
             response, metrics = self.llm.complete_stream(
                 messages=messages,
@@ -91,9 +103,9 @@ class Agent:
                 )
             )
 
+            level = context.level
             utilization = context.input_utilization_percent
             if utilization is not None:
-                level = context.level
                 if (
                     level == ContextLevel.CRITICAL and last_context_level != ContextLevel.CRITICAL
                 ) or (level == ContextLevel.WARNING and last_context_level == ContextLevel.NORMAL):
@@ -111,23 +123,26 @@ class Agent:
             if metrics.finish_reason == "length":
                 raise RuntimeError("Response incomplete: output token limit reached")
 
+            prune_before_request = level == ContextLevel.CRITICAL
             messages.append(response.model_dump(exclude_none=True))
 
             if not response.tool_calls:
                 self.messages = messages
+                self._prune_before_next_task = prune_before_request
                 return response.content or ""
 
             for call in response.tool_calls:
-                messages.append(
-                    execute_tool(
-                        call,
-                        metrics=self.metrics,
-                        on_event=self.on_event,
-                        approve=self.approve,
-                    )
+                result = execute_tool(
+                    call,
+                    metrics=self.metrics,
+                    on_event=self.on_event,
+                    approve=self.approve,
                 )
+                result["content"] = self.context_settings.truncate_tool_output(result["content"])
+                messages.append(result)
 
         raise RuntimeError("Max iterations exceeded")
 
     def reset_conversation(self) -> None:
         self.messages = self.messages[:1]
+        self._prune_before_next_task = False

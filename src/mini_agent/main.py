@@ -26,6 +26,7 @@ def main() -> None:
             output_reserve=_env_int("MODEL_OUTPUT_RESERVE", defaults.output_reserve),
             warning_percent=_env_int("CONTEXT_WARNING_PERCENT", defaults.warning_percent),
             critical_percent=_env_int("CONTEXT_CRITICAL_PERCENT", defaults.critical_percent),
+            max_tool_output_chars=_env_int("MAX_TOOL_OUTPUT_CHARS", defaults.max_tool_output_chars),
         )
     except ValueError as exc:
         raise SystemExit(f"Invalid context configuration: {exc}") from None
