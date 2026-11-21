@@ -9,7 +9,7 @@ def test_conversation_preserves_history() -> None:
     llm = Mock()
     captured_messages = []
 
-    def complete_stream(*, messages, tools, on_text):
+    def complete_stream(*, messages, tools, on_text, max_output_tokens):
         captured_messages.append(deepcopy(messages))
 
         response = Mock()

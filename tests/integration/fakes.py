@@ -21,11 +21,14 @@ class FakeLLM:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         on_text: Callable[[str], None],
+        *,
+        max_output_tokens: int,
     ) -> tuple[ChatCompletionMessage, Any]:
         self.calls.append(
             {
                 "messages": list(messages),
                 "tools": tools,
+                "max_output_tokens": max_output_tokens,
             }
         )
 

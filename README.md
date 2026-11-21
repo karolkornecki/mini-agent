@@ -52,6 +52,9 @@ The application loads settings from `.env`. The example file contains these sett
 | `OPENROUTER_API_KEY` | Required API key for model requests through OpenRouter. | Placeholder; replace with your key. |
 | `MODEL` | OpenRouter model identifier. | `qwen/qwen3-coder` |
 | `MODEL_CONTEXT_WINDOW` | Positive integer context capacity in tokens, used for per-request utilization and the task report. Defaults to `128000` when absent; invalid values stop startup. It does not change the model's actual limit. | `128000` |
+| `MODEL_OUTPUT_RESERVE` | Positive integer space reserved for generated tokens, also sent as the request's generation limit. Must be smaller than `MODEL_CONTEXT_WINDOW`. | `8192` |
+| `CONTEXT_WARNING_PERCENT` | Integer warning threshold as a percentage of input capacity after reserving output space. | `80` |
+| `CONTEXT_CRITICAL_PERCENT` | Integer critical threshold; settings must satisfy `0 < warning < critical <= 100`. | `95` |
 | `LANGFUSE_TRACING_ENABLED` | Enable or disable Langfuse tracing. | `false` |
 | `LANGFUSE_PUBLIC_KEY` | Public key for your Langfuse project. | Commented out. |
 | `LANGFUSE_SECRET_KEY` | Secret key for your Langfuse project. | Commented out. |
@@ -83,11 +86,42 @@ zero. A failed request produces no context measurement, so the task report uses
 the latest completed request, or `unknown` if none completed. Each task starts
 with fresh metrics; `/clear` resets conversation history only.
 
-`AgentMetrics(context_window=...)` exposes `context_input_tokens` and
-`context_utilization_percent` for the latest request, returning `None` when
-unknown. The existing `llm_calls` list retains per-request token counts and
-`usage_available`. `Agent` emits a `ContextUsage` event after recording each
-request, before executing its tool calls; the CLI renderer handles its display.
+`AgentMetrics` exposes `context_input_tokens` and `context_utilization_percent`
+for the latest request, returning `None` when unknown. The existing `llm_calls`
+list retains per-request token counts and `usage_available`. `Agent` emits a
+`ContextUsage` event after recording each request, before executing its tool calls;
+the CLI renderer handles its display.
+
+Input capacity is `MODEL_CONTEXT_WINDOW - MODEL_OUTPUT_RESERVE`. Capacity warnings
+use the latest request's input count as a percentage of that smaller allowance;
+the original full-window utilization stays separate. A warning starts at the
+configured warning threshold and becomes critical at the critical threshold,
+including their exact boundaries. For example, a `128000` context window with an
+`8192` output reserve leaves `119808` tokens of input capacity.
+
+Warnings appear on entering a warning level or escalating to critical. Repeated
+measurements at the same level produce no new warning; a decrease rearms the
+level. Missing usage stays unknown and does not rearm warnings. Warning tracking
+starts fresh for each task. The task report includes input capacity, remaining
+input tokens, and the latest level. Negative remaining capacity and percentages
+above 100% stay visible.
+
+`context.py` holds frozen `ContextSettings` and `ContextState` dataclasses. Pass
+settings with `Agent(..., context_settings=ContextSettings(...))`; the agent and
+its fresh task metrics share them. `agent.metrics.context_state` exposes the
+latest measured state for future conversation optimization and compaction.
+`ContextWarning` events carry capacity alerts separately from `ContextUsage`.
+Warnings are based on completed requests; they neither count outgoing requests
+locally nor block a request. Automatic truncation and compaction are not yet
+implemented.
+
+Each request sends the output reserve as `max_completion_tokens`. This allowance
+covers generated tokens, including reasoning tokens when the model uses them.
+If generation ends with `finish_reason="length"`, the agent records the final
+usage and context events, then raises a response-incomplete error before executing
+any tool calls from that response or committing the task's conversation. Streamed
+text may already be visible; earlier tool changes remain in effect. See
+[OpenRouter's generation-limit documentation](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion).
 
 `Agent` owns the conversation and model loop. For each tool call, it delegates to
 `execute_tool()`, which parses arguments, delegates permission checks and invocation
@@ -108,6 +142,7 @@ mini-agent/
 ├── src/
 │   └── mini_agent/
 │       ├── main.py               # Entry point, CLI wiring, and final metrics output
+│       ├── context.py            # Shared capacity settings, measured state, and warning levels
 │       ├── agent/
 │       │   ├── agent.py          # Conversation history, model loop, and task metrics
 │       │   ├── tool_execution.py # Tool lifecycle, permission checks, events, and results

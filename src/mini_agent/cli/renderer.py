@@ -3,6 +3,7 @@ import json
 from mini_agent.agent.events import (
     AgentEvent,
     ContextUsage,
+    ContextWarning,
     TextDelta,
     ToolFinished,
     ToolStarted,
@@ -31,6 +32,20 @@ class CLIRenderer:
                 if input_tokens is not None and utilization is not None:
                     context = f"{input_tokens:,} / {context_window:,} tokens ({utilization:.1f}%)"
                 print(f"Context (last request, iteration {iteration}): {context}")
+
+            case ContextWarning(
+                iteration=iteration,
+                level=level,
+                input_tokens=input_tokens,
+                input_capacity=input_capacity,
+                utilization_percent=utilization,
+            ):
+                self._finish_stream()
+                print(
+                    f"! Context {level} (iteration {iteration}): "
+                    f"{input_tokens:,} / {input_capacity:,} input tokens "
+                    f"({utilization:.1f}% of input capacity)"
+                )
 
             case ToolStarted(name=name, arguments=arguments):
                 self._finish_stream()
