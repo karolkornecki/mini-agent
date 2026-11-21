@@ -40,11 +40,12 @@ uv run --locked ruff check .
 | Location | Responsibility |
 | --- | --- |
 | `src/mini_agent/main.py` | Load dotenv, validate context capacity, wire the agent and renderer, start the CLI, and flush traces on exit. |
+| `src/mini_agent/context.py` | Frozen context settings and measured state, input capacity, remaining tokens, and warning levels. |
 | `src/mini_agent/cli/cli.py` | Interactive input loop, `/clear`, `/exit`, and task error display. |
 | `src/mini_agent/cli/renderer.py` | Render streamed text, context usage, tool events, and task metrics in the terminal. |
 | `src/mini_agent/agent/agent.py` | System prompt, conversation state, model loop, task metrics, and approval callback wiring. |
 | `src/mini_agent/agent/tool_execution.py` | Per-call arguments, registry lookup, permission-checked invocation, tracing, events, tool metrics, and result messages. |
-| `src/mini_agent/agent/events.py` | Frozen `TextDelta`, `ContextUsage`, `ToolStarted`, and `ToolFinished` event dataclasses. |
+| `src/mini_agent/agent/events.py` | Frozen text, context measurement, capacity warning, and tool lifecycle event dataclasses. |
 | `src/mini_agent/llm/client.py` | OpenAI SDK client pointed at OpenRouter; reconstruct streamed text/tool calls and collect usage. |
 | `src/mini_agent/tools/` | Plain tool functions, shared path checks, schemas, registry, command allowlist. Read [its guide](src/mini_agent/tools/AGENTS.md) when changing tools. |
 | `src/mini_agent/permissions/` | `ALLOW`/`ASK`/`DENY` policy and interactive approval. |
@@ -56,11 +57,15 @@ The project/console command is `mini-agent`; Python imports use `mini_agent`.
 
 ## Behavior to preserve
 
-- `LLMClient.complete_stream(messages, tools, on_text)` returns an OpenAI
+- `LLMClient.complete_stream(messages, tools, on_text, *, max_output_tokens)` returns an OpenAI
   `ChatCompletionMessage` and `LLMCallMetrics`. It forwards text fragments through
   `on_text` and assembles tool-call fragments by index, including arguments and IDs.
   Usage may arrive in a final chunk without choices, or be absent entirely.
   Missing usage sets `usage_available=False` while numeric token fields stay zero.
+  It sends `max_completion_tokens=max_output_tokens` and captures `finish_reason`
+  on `LLMCallMetrics`, draining the stream to retain final usage. An agent records
+  metrics and context events before rejecting `"length"` as an incomplete response;
+  it executes no tools from that response and keeps the prior successful history.
 - `Agent.run()` resets metrics for each task but retains conversation history
   across successful turns. `_run()` works on a copy and commits it to
   `self.messages` only upon a response without tool calls. `/clear` keeps only the
@@ -86,16 +91,24 @@ The project/console command is `mini-agent`; Python imports use `mini_agent`.
 - Read tools are allowed; file mutations and commands ask for approval; tools
   without an explicit permission default to denied. This describes mini-agent's
   runtime policy, not an extra approval requirement for developing this repo.
-- Startup validates `MODEL_CONTEXT_WINDOW` as a positive integer (default
-  `128000`) and passes it through `Agent` to each fresh `AgentMetrics`.
+- Startup validates context settings and passes one frozen `ContextSettings`
+  through `Agent(..., context_settings=...)` to each fresh `AgentMetrics`.
+  Defaults are window `128000`, output reserve `8192`, warning `80%`, critical `95%`.
+  Input capacity subtracts the reserve from the full window; thresholds use that
+  smaller capacity and trigger at equality. Settings and derived `ContextState`
+  live in `context.py`; access the latest state through `metrics.context_state`.
   `context_input_tokens` and `context_utilization_percent` describe the latest
   completed request's input, returning `None` for no calls or missing latest usage.
   A reported zero is known; percentages above 100% remain unclamped. Cumulative
   token totals stay separate. Each completed request emits `ContextUsage` after
   recording metrics and before tool execution. Failed requests emit no measurement;
   event-callback exceptions propagate. `/clear` leaves metrics intact.
-  This capacity affects reporting only. Tracing is optional; preserve tested
-  no-op fallback behavior without swallowing exceptions from agent execution.
+  `ContextWarning` follows `ContextUsage` only when entering or escalating a level.
+  A decrease rearms warnings; unknown usage leaves alert tracking unchanged.
+  Tracking resets for each task. Capacity warnings use completed provider usage;
+  they add no local token estimator, request blocking, truncation, or compaction.
+  The output reserve also caps generated tokens. Tracing is optional; preserve
+  tested no-op fallback behavior without swallowing exceptions from execution.
 
 ## Change workflow
 

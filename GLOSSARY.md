@@ -28,3 +28,15 @@ _Avoid_: Tool error
 The estimated percentage of configured context capacity used by the input to the
 most recently completed model request, based on provider-reported token usage.
 It is unknown when that request has no usage data.
+
+**Output reserve**:
+Context space kept free for the model's generated response, also used as the
+maximum generated-token allowance for a request.
+
+**Input capacity**:
+The configured context window minus the output reserve, available for conversation
+history and tool definitions.
+
+**Context level**:
+The latest request's input usage classified against input capacity as normal,
+warning, or critical; unknown when usage data is absent.

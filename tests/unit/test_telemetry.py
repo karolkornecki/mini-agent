@@ -1,5 +1,6 @@
 import pytest
 
+from mini_agent.context import ContextLevel, ContextSettings
 from mini_agent.telemetry.telemetry import (
     AgentMetrics,
     LLMCallMetrics,
@@ -53,7 +54,7 @@ def test_empty_metrics() -> None:
 )
 def test_context_utilization_uses_configured_capacity(input_tokens, expected_percent) -> None:
     metrics = AgentMetrics(
-        context_window=1000,
+        context_settings=ContextSettings(context_window=1000, output_reserve=100),
         llm_calls=[LLMCallMetrics(1.0, input_tokens, 500, cached_tokens=input_tokens)],
     )
 
@@ -64,7 +65,7 @@ def test_context_utilization_uses_configured_capacity(input_tokens, expected_per
 
 def test_missing_latest_usage_does_not_reuse_previous_measurement() -> None:
     metrics = AgentMetrics(
-        context_window=1000,
+        context_settings=ContextSettings(context_window=1000, output_reserve=100),
         llm_calls=[
             LLMCallMetrics(1.0, 500, 100),
             LLMCallMetrics(1.0, 0, 0, usage_available=False),
@@ -78,10 +79,20 @@ def test_missing_latest_usage_does_not_reuse_previous_measurement() -> None:
     assert "Context utilization (last request): unknown" in metrics.report()
 
 
-@pytest.mark.parametrize("context_window", [0, -1])
-def test_nonpositive_context_window_is_rejected(context_window) -> None:
-    with pytest.raises(ValueError, match="context_window must be a positive integer"):
-        AgentMetrics(context_window=context_window)
+def test_context_state_uses_latest_request_and_retains_previous_snapshot() -> None:
+    settings = ContextSettings(context_window=1200, output_reserve=200)
+    metrics = AgentMetrics(context_settings=settings, llm_calls=[LLMCallMetrics(0.1, 800, 20)])
+    previous = metrics.context_state
+
+    metrics.llm_calls.append(LLMCallMetrics(0.1, 500, 20))
+
+    assert previous.settings is settings
+    assert previous.level == ContextLevel.WARNING
+    assert previous.remaining_input_tokens == 200
+    assert metrics.context_state.settings is settings
+    assert metrics.context_state.level == ContextLevel.NORMAL
+    assert metrics.context_state.remaining_input_tokens == 500
+    assert metrics.input_tokens_total == 1300
 
 
 def test_elapsed_time_non_negative():
@@ -119,7 +130,7 @@ def test_metrics_totals() -> None:
 
 def test_metrics_report() -> None:
     metrics = AgentMetrics(
-        context_window=1000,
+        context_settings=ContextSettings(context_window=1000, output_reserve=100),
         llm_calls=[
             LLMCallMetrics(
                 latency_seconds=1.0,
@@ -142,3 +153,7 @@ def test_metrics_report() -> None:
     assert "Output tokens total: 20" in report
     assert "Cached tokens total: 40" in report
     assert "Context utilization (last request): 10.0%" in report
+    assert "Input capacity: 900 tokens (100 reserved for output)" in report
+    assert "Input capacity utilization (last request): 11.1%" in report
+    assert "Remaining input capacity (last request): 800 tokens" in report
+    assert "Context level (last request): normal" in report

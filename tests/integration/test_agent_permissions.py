@@ -12,6 +12,7 @@ import mini_agent.agent.agent as agent_module
 import mini_agent.agent.tool_execution as execution_module
 from mini_agent.agent.agent import Agent
 from mini_agent.agent.events import AgentEvent, ContextUsage, TextDelta, ToolFinished, ToolStarted
+from mini_agent.context import ContextSettings
 from mini_agent.permissions.permissions import Permission
 from tests.integration.fakes import FakeLLM, fake_metrics, final_response, tool_call_response
 
@@ -270,7 +271,9 @@ def test_execution_uses_fresh_metrics_for_each_task(sample_project: Path) -> Non
             (final_response("Next"), fake_metrics()),
         ]
     )
-    agent = Agent(fake_llm, context_window=1000)
+    agent = Agent(
+        fake_llm, context_settings=ContextSettings(context_window=1000, output_reserve=100)
+    )
 
     agent.run("Read README.md")
     first_metrics = agent.metrics

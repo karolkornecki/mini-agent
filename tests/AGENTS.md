@@ -57,9 +57,13 @@ reports are ignored by git. Do not add real API calls to the default test suite.
   observability tests. Use `capsys` for renderer output and collected events
   when testing event emission.
 - Agent fakes should return real `LLMCallMetrics`, including
-  `usage_available=False` for omitted usage. Every completed request emits
+  `usage_available=False` for omitted usage and `finish_reason="length"` for
+  incomplete output. `complete_stream` fakes accept keyword-only
+  `max_output_tokens`; `FakeLLM` records it with each request. Every completed request emits
   `ContextUsage` after any text deltas and before tool events. Capacity is supplied
-  with `Agent(..., context_window=...)`; renderers read it from the metrics.
+  with `Agent(..., context_settings=ContextSettings(...))`; small test windows
+  need an explicit smaller output reserve. Renderers read settings from metrics.
+  Capacity alerts use separate `ContextWarning` events after `ContextUsage`.
 
 ## Where to extend coverage
 
@@ -74,6 +78,7 @@ reports are ignored by git. Do not add real API calls to the default test suite.
 | Conversation history or reset | `unit/test_conversation.py` |
 | Streaming text, tool-call fragments, usage | `unit/test_llm_stream.py` |
 | Context measurements, unknown usage, task resets and failures | `unit/test_telemetry.py`, `integration/test_context_monitoring.py` |
+| Capacity thresholds, warning repetition, output limits | `unit/test_context.py`, `unit/test_llm_stream.py`, `integration/test_context_monitoring.py` |
 | Startup context capacity and invalid configuration | `unit/test_main.py` |
 | CLI input and event rendering | `unit/test_cli.py`, `unit/test_cli_renderer.py` |
 | Metrics or Langfuse behavior | `unit/test_telemetry.py`, `unit/test_observability.py` |

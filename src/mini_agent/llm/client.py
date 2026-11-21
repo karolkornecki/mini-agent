@@ -30,6 +30,8 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         on_text: Callable[[str], None],
+        *,
+        max_output_tokens: int,
     ) -> tuple[ChatCompletionMessage, LLMCallMetrics]:
         with llm_trace(self.model) as generation:
             start = perf_counter()
@@ -40,11 +42,13 @@ class LLMClient:
                 tools=tools,
                 stream=True,
                 stream_options={"include_usage": True},
+                max_completion_tokens=max_output_tokens,
             )
 
             content_parts: list[str] = []
             tool_calls: dict[int, dict[str, Any]] = {}
             usage = None
+            finish_reason = None
 
             for chunk in stream:
                 if chunk.usage is not None:
@@ -53,7 +57,10 @@ class LLMClient:
                 if not chunk.choices:
                     continue
 
-                delta = chunk.choices[0].delta
+                choice = chunk.choices[0]
+                if choice.finish_reason is not None:
+                    finish_reason = choice.finish_reason
+                delta = choice.delta
 
                 if delta.content:
                     content_parts.append(delta.content)
@@ -110,6 +117,7 @@ class LLMClient:
                 output_tokens=usage.completion_tokens if usage else 0,
                 cached_tokens=cached,
                 usage_available=usage is not None,
+                finish_reason=finish_reason,
             )
 
             generation.update(
@@ -121,6 +129,7 @@ class LLMClient:
                 metadata={
                     "latency_seconds": latency,
                     "tool_calls_requested": len(reconstructed_calls),
+                    "finish_reason": finish_reason,
                 },
             )
 

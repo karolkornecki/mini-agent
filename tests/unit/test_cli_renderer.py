@@ -2,9 +2,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from mini_agent.agent.events import ContextUsage, TextDelta, ToolStarted
+from mini_agent.agent.events import ContextUsage, ContextWarning, TextDelta, ToolStarted
 from mini_agent.cli.cli import run_cli
 from mini_agent.cli.renderer import CLIRenderer
+from mini_agent.context import ContextLevel, ContextSettings
 from mini_agent.telemetry.telemetry import (
     AgentMetrics,
     LLMCallMetrics,
@@ -108,7 +109,7 @@ def test_renderer_displays_metrics(capsys) -> None:
     renderer = CLIRenderer()
 
     metrics = AgentMetrics(
-        context_window=1000,
+        context_settings=ContextSettings(context_window=1000, output_reserve=100),
         llm_calls=[
             LLMCallMetrics(
                 latency_seconds=0.5,
@@ -156,4 +157,17 @@ def test_context_usage_finishes_stream_before_tools(
         "Inspecting files.\n"
         f"Context (last request, iteration 1): {expected}\n"
         '\n→ read_file\n{\n  "path": "README.md"\n}\n'
+    )
+
+
+@pytest.mark.parametrize("level", [ContextLevel.WARNING, ContextLevel.CRITICAL])
+def test_renderer_displays_capacity_warning(capsys, level) -> None:
+    renderer = CLIRenderer()
+    renderer.render(ContextUsage(2, 95000, 128000, 74.21875))
+    renderer.render(ContextWarning(2, level, 95000, 100000, 95.0))
+
+    output = capsys.readouterr().out
+    assert output.endswith(
+        f"! Context {level} (iteration 2): 95,000 / 100,000 input tokens "
+        "(95.0% of input capacity)\n"
     )

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from mini_agent.context import ContextLevel
+
 
 @dataclass(frozen=True)
 class TextDelta:
@@ -13,6 +15,15 @@ class ContextUsage:
     input_tokens: int | None
     context_window: int
     utilization_percent: float | None
+
+
+@dataclass(frozen=True)
+class ContextWarning:
+    iteration: int
+    level: ContextLevel
+    input_tokens: int
+    input_capacity: int
+    utilization_percent: float
 
 
 @dataclass(frozen=True)
@@ -30,4 +41,4 @@ class ToolFinished:
     output: str
 
 
-type AgentEvent = TextDelta | ContextUsage | ToolStarted | ToolFinished
+type AgentEvent = TextDelta | ContextUsage | ContextWarning | ToolStarted | ToolFinished
